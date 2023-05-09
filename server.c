@@ -142,6 +142,8 @@ void serverActivity()
 
     while (1)
     {
+        // TODO: How much worker available
+        // TODO: Command connect or not check available workers (mutual excluision)
         int a;
         scanf("%d", &a);
 
