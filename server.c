@@ -50,7 +50,7 @@ void waitAllWorkers()
 // TODO: Signal Handler will be implement
 void sigintHandler()
 {
-
+    exit(1);
 }
 
 // TODO: Check directory exist or not
@@ -105,15 +105,15 @@ void initSharedMemories()
         perror("[ERROR] Shared Mem Create");
         exit(1);
     }
-    ftruncate(shmFd, clientCapacity * sizeof(int) * 2);
+    ftruncate(shmFd, SHARED_MEM_SIZE);
     
-    clientQueue = mmap(NULL, clientCapacity * sizeof(int) * 2, PROT_READ_WRITE, MAP_SHARED, shmFd, 0);
+    clientQueue = mmap(NULL, SHARED_MEM_SIZE, PROT_READ_WRITE, MAP_SHARED, shmFd, 0);
     if (shmFd == FALSE) {
         perror("[ERROR] Shared Mem mmap");
         exit(1);
     }
 
-    for (int i = 0; i < clientCapacity; ++i) {
+    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(int); ++i) {
         clientQueue[i] = -1;
     }
 }
@@ -124,6 +124,36 @@ void initSignals()
     memset(&sigintAction, 0, sizeof(sigintAction));
     sigintAction.sa_handler = &sigintHandler;
     sigaction(SIGINT, &sigintAction, NULL);
+}
+
+int getQueueDelimetor()
+{
+    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(int); ++i) {
+        if (clientQueue[i] == -1) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+void serverActivity()
+{
+    int clientIdGenerator = 0;
+
+    while (1)
+    {
+        int a;
+        scanf("%d", &a);
+
+        sem_wait(emptySem);
+        sem_wait(mutexSem);
+        
+        int queueDelimetor = getQueueDelimetor();
+        clientQueue[queueDelimetor++] = ++clientIdGenerator;
+        
+        sem_post(mutexSem);
+        sem_post(fullSem);
+    }
 }
 
 int main(int argc, char const *argv[])
@@ -140,6 +170,8 @@ int main(int argc, char const *argv[])
 
     initWorkers();
 
+    serverActivity();
+
     waitAllWorkers();
 
     return 0;
@@ -147,9 +179,25 @@ int main(int argc, char const *argv[])
 
 int WorkerMain()
 {
-    for (int i = 0; i < clientCapacity; ++i) {
-        fprintf(stdout, "%d", clientQueue[i]);
+    while (1)
+    {
+        sem_wait(fullSem);
+        sem_wait(mutexSem);
+
+        int clientID = clientQueue[0];
+        fprintf(stdout, "Client Id: %d\n", clientID);
+
+        // Consume client id from client queue (shifting)
+        for (int i = 0; i < clientCapacity - 1; ++i) {
+            clientQueue[i] = clientQueue[i + 1];
+        }
+        clientQueue[clientCapacity - 1] = -1;
+
+        sem_post(mutexSem);
+        sem_post(emptySem);
+
+        // TODO: open fifo with client ID
+        sleep(100000);
     }
-    fprintf(stdout, "\n");
     return EXIT_SUCCESS;
 }
