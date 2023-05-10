@@ -31,11 +31,28 @@
 
 #define REQUEST_BUFFER_SIZE 25600
 #define LNG_BUFFER_SIZE 2048
+#define MSG_BUFFER_SIZE 1024 - sizeof(enum)
 #define BUFFER_SIZE 1024
 #define HALF_BUFFER 512
 
 #define FALSE -1
 #define TRUE 0
+
+enum messageType
+{
+    CONNECTION_ACCEPTED,
+    CONNECTION_DECLINED,
+    FILE_DOWNLOAD_NAME,
+    FILE_DOWNLOAD_OK,
+    UNKNOWN_REQUEST,
+    UNKNOWN_USAGE
+};
+
+struct message_t
+{
+    enum messageType type;
+    char content[MSG_BUFFER_SIZE];
+};
 
 int char_count(const char* string, char c, size_t size);
 char* time_as_string();
