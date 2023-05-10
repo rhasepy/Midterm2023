@@ -31,7 +31,6 @@
 
 #define REQUEST_BUFFER_SIZE 25600
 #define LNG_BUFFER_SIZE 2048
-#define MSG_BUFFER_SIZE 1024 - sizeof(enum)
 #define BUFFER_SIZE 1024
 #define HALF_BUFFER 512
 
@@ -48,6 +47,7 @@ enum messageType
     UNKNOWN_USAGE
 };
 
+#define MSG_BUFFER_SIZE 1024 - sizeof(enum messageType)
 struct message_t
 {
     enum messageType type;
