@@ -48,6 +48,12 @@ void cleanupServer()
     if (TRUE == serverFlag) {
         unlink(fifoName);
     }
+
+    for (int i = 0; i < clientCapacity; ++i) {
+        char workerFifoName[HALF_BUFFER];
+        sprintf(workerFifoName, "WORKER_%d", i);
+        unlink(workerFifoName);
+    }
 }
 
 void waitAllWorkers()
@@ -97,7 +103,7 @@ void initWorkers()
 
         // Start children process
         } else if (workerPool[i] == 0) {
-            int status = WorkerMain();
+            int status = WorkerMain(i);
             exit(status);
         }
     }
@@ -192,10 +198,26 @@ int createServerFifo()
     return returnFd;
 }
 
+void openWorkerFifosDummy()
+{
+    for (int i = 0; i < clientCapacity; ++i) {
+        char tempFifoName[HALF_BUFFER];
+        sprintf(tempFifoName, "WORKER_%d", i);
+
+        int dummyFd = open(tempFifoName, O_WRONLY);
+        if (FALSE == dummyFd) {
+            perror("server open fifo");
+            exit(EXIT_FAILURE);
+        }
+    } 
+}
+
 void serverActivity()
 {
     int fifoFd = createServerFifo();
-    
+
+    openWorkerFifosDummy();
+
     while (1)
     {
         struct message_t msg;
@@ -232,6 +254,7 @@ void serverActivity()
                 
                 struct message_t resp;
                 resp.type = CONNECTION_ACCEPTED;
+                memset(resp.content, '\0', MSG_BUFFER_SIZE);
                 write(clientFd, &resp, sizeof(struct message_t));
                 close(clientFd);
                 
@@ -249,6 +272,7 @@ void serverActivity()
 
         } else {
             struct message_t resp;
+            memset(resp.content, '\0', MSG_BUFFER_SIZE);
             if (msg.type == TRY_CONNECT_REQ || msg.type == CONNECT_REQ) {
                 resp.type = CONNECTION_ACCEPTED;
             } else {
@@ -291,9 +315,32 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-int WorkerMain()
+int WorkerMain(int WorkerID)
 {
     serverFlag = FALSE;
+
+    char workerFifoName[HALF_BUFFER];
+    memset(workerFifoName, '\0', HALF_BUFFER);
+    sprintf(workerFifoName, "WORKER_%d", WorkerID);
+
+    umask(0);
+    if (FALSE == mkfifo(workerFifoName, USR_READ_WRITE) && errno != EEXIST) {
+        perror("Fifo can not create...");
+        exit(EXIT_FAILURE);
+    }
+
+    int workerFd = open(workerFifoName, O_RDONLY);
+    if (FALSE == workerFd) {
+        perror("Fifo can not open...");
+        exit(EXIT_FAILURE);
+    }
+
+    // Dummy writer side opened from server
+    
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        perror("Sigpipe ignoring error...\n");
+        exit(EXIT_FAILURE);
+    }
 
     while (1)
     {
@@ -302,7 +349,7 @@ int WorkerMain()
         sem_wait(mutexSem);
 
         // Consume client pid for open fifo
-        pid_t clientID = getClientQueue(clientQueue, clientCapacity);
+        pid_t clientPid = getClientQueue(clientQueue, clientCapacity);
         
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) - 1;
@@ -312,9 +359,23 @@ int WorkerMain()
         sem_post(emptySem);
         // End of Synchronization Block
 
-        // TODO: Open fifo and handle response
-        sleep(10);
-        fprintf(stdout, "Finished\n");
+        char clientEndPoint[HALF_BUFFER];
+        sprintf(clientEndPoint, "CLIENT_%d", clientPid);
+        
+        int clientFd = open(clientEndPoint, O_WRONLY);
+        if (FALSE == clientFd) {
+            fprintf(stderr, "[WORKER ERROR] Client does not exist!\n");
+        }
+
+        struct message_t resp;
+        memset(resp.content, '\0', MSG_BUFFER_SIZE);
+        resp.type = WORKER_ENDPOINT;
+        sprintf(resp.content, "WORKER_%d", WorkerID);
+        write(clientFd, &resp, sizeof(struct message_t));
+
+        struct message_t req;
+        read(workerFd, &req, sizeof(struct message_t));
+        fprintf(stdout, "%s\n", req.content);
 
         // End of worker task
         sem_wait(mutexAvailableWorker);
