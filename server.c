@@ -244,6 +244,7 @@ void serverActivity()
 
                 struct message_t resp;
                 resp.type = CONNECTION_DECLINED;
+                memset(resp.content, '\0', MSG_BUFFER_SIZE);
                 write(clientFd, &resp, sizeof(struct message_t));
                 close(clientFd);
 
