@@ -39,12 +39,11 @@
 
 enum messageType
 {
+    CONNECT_REQ,
+    TRY_CONNECT_REQ,
     CONNECTION_ACCEPTED,
     CONNECTION_DECLINED,
-    FILE_DOWNLOAD_NAME,
-    FILE_DOWNLOAD_OK,
-    UNKNOWN_REQUEST,
-    UNKNOWN_USAGE
+    UNKNOWN
 };
 
 #define MSG_BUFFER_SIZE 1024 - sizeof(enum messageType)

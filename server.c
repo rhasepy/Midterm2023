@@ -1,28 +1,28 @@
 #include "utils.h"
 
 // ####################### -- ####################### -- ####################### -- ####################### //
-// Server configuration fileds
-char workingDirectory[HALF_BUFFER];
+// -- Server Fields -- //
+int serverFlag = TRUE;
 int clientCapacity = 0;
+char fifoName[HALF_BUFFER];
+char workingDirectory[HALF_BUFFER];
 
-// Worker process pids
+// -- Worker Processes -- //
 pid_t* workerPool = NULL;
 
 // -- Shared Memory Part -- //
-// Client id list
 int shmFd = -1;
+// TODO: ADDED int* for the client number pair number and pid
 pid_t* clientQueue = NULL;
-// How much worker available
 int* availableWorker = NULL;
 
 // -- Semaphore Part -- //
-// Client queue mutual exclusion tools between worker and server
-sem_t* emptySem;
 sem_t* fullSem;
+sem_t* emptySem;
 sem_t* mutexSem;
 sem_t* mutexAvailableWorker;
 
-// Worker main function
+// -- Worker Part -- //
 int WorkerMain();
 // ####################### -- ####################### -- ####################### -- ####################### //
 
@@ -44,6 +44,10 @@ void cleanupServer()
 
     shm_unlink(CLIENT_QUEUE_MEM);
     shm_unlink(AV_WKR_MEM);
+
+    if (TRUE == serverFlag) {
+        unlink(fifoName);
+    }
 }
 
 void waitAllWorkers()
@@ -154,27 +158,113 @@ void initSignals()
     sigaction(SIGINT, &sigintAction, NULL);
 }
 
+int createServerFifo()
+{
+    umask(0);
+    memset(fifoName, '\0', HALF_BUFFER);
+    sprintf(fifoName, "SERVER_%d", getpid());
+
+    if (FALSE == mkfifo(fifoName, USR_READ_WRITE) && errno != EEXIST) {
+        perror("Fifo can not create...");
+        exit(EXIT_FAILURE);
+    }
+    
+    fprintf(stdout, "Server Started PID %d...\n", getpid());
+    fprintf(stdout, "waiting for clients...\n");
+
+    int returnFd = open(fifoName, O_RDONLY);
+    if (FALSE == returnFd) {
+        perror("Fifo can not open...");
+        exit(EXIT_FAILURE);
+    }
+
+    int dummyFd = open(fifoName, O_WRONLY);
+    if (FALSE == dummyFd) {
+        perror("Fifo can not open for writer dummy...");
+        exit(EXIT_FAILURE);
+    }
+
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        perror("Sigpipe ignoring error...\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return returnFd;
+}
+
 void serverActivity()
 {
+    int fifoFd = createServerFifo();
+    
     while (1)
     {
-        pid_t asAclientInput;
-        scanf("%d", &asAclientInput);
+        struct message_t msg;
+        if (read(fifoFd, &msg, sizeof(struct message_t)) != sizeof(struct message_t)) {
+            fprintf(stderr, "[ERROR] Request invalid");
+            continue;
+        }
+
+        pid_t clientPid = atoi(msg.content);
+        char clientFifo[HALF_BUFFER];
+        sprintf(clientFifo, "CLIENT_%d", clientPid);
+
+        int clientFd = open(clientFifo, O_WRONLY);
+        if (FALSE == clientFd) {
+            continue;
+        }
 
         sem_wait(mutexAvailableWorker);
         if (*availableWorker == 0) {
-            fprintf(stdout, "Workers Busy!\n");
-            sem_post(mutexAvailableWorker);
-            continue;
+
+            fprintf(stdout, "Connection request PID %d... Que FULL\n", clientPid);
+
+            if (msg.type == TRY_CONNECT_REQ) {
+
+                struct message_t resp;
+                resp.type = CONNECTION_DECLINED;
+                write(clientFd, &resp, sizeof(struct message_t));
+                close(clientFd);
+
+                sem_post(mutexAvailableWorker);
+                continue;
+
+            } else if (msg.type == CONNECT_REQ) {
+                
+                struct message_t resp;
+                resp.type = CONNECTION_ACCEPTED;
+                write(clientFd, &resp, sizeof(struct message_t));
+                close(clientFd);
+                
+            } else {
+                
+                struct message_t resp;
+                resp.type = UNKNOWN;
+                sprintf(resp.content, "Please send connect or try connect command!\n");
+                write(clientFd, &resp, sizeof(struct message_t));
+                close(clientFd);
+
+                sem_post(mutexAvailableWorker);
+                continue;
+            }
+
+        } else {
+            struct message_t resp;
+            if (msg.type == TRY_CONNECT_REQ || msg.type == CONNECT_REQ) {
+                resp.type = CONNECTION_ACCEPTED;
+            } else {
+                resp.type = UNKNOWN; 
+                sprintf(resp.content, "Please send connect or try connect command!\n"); 
+            }
+            write(clientFd, &resp, sizeof(struct message_t));
+            close(clientFd);
         }
         sem_post(mutexAvailableWorker);
 
+        // Enqueued client synchronized block
         sem_wait(emptySem);
         sem_wait(mutexSem);
-        
         int queueDelimetor = getQueueDelimetor(clientQueue, -1);
-        clientQueue[queueDelimetor++] = asAclientInput;
-        
+        clientQueue[queueDelimetor++] = clientPid;
         sem_post(mutexSem);
         sem_post(fullSem);
     }
@@ -203,6 +293,8 @@ int main(int argc, char const *argv[])
 
 int WorkerMain()
 {
+    serverFlag = FALSE;
+
     while (1)
     {
         // Begining of Synchronization Block
@@ -220,14 +312,11 @@ int WorkerMain()
         sem_post(emptySem);
         // End of Synchronization Block
 
-        char fifoName[HALF_BUFFER];
-        memset(fifoName, '\0', HALF_BUFFER);
-        sprintf(fifoName, "ClientFifo_%d", clientID);
-        fprintf(stdout, "%s\n",  fifoName);
-
         // TODO: Open fifo and handle response
         sleep(10);
         fprintf(stdout, "Finished\n");
+
+        // End of worker task
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) + 1;
         sem_post(mutexAvailableWorker);
