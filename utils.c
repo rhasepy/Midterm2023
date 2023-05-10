@@ -75,3 +75,26 @@ char** read_file(int fd_, int* lines, const int lock)
 
 	return parsed_file;	
 }
+
+pid_t getClientQueue(pid_t* queue, int len)
+{
+    pid_t returnVal = queue[0];
+
+    // Consume client id from client queue (shifting)
+    for (int i = 0; i < len - 1; ++i) {
+        queue[i] = queue[i + 1];
+    }
+    queue[len - 1] = -1;
+
+    return returnVal;
+}
+
+int getQueueDelimetor(pid_t* queue, int target)
+{
+    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i) {
+        if (queue[i] == target) {
+            return i;
+        }
+    }
+    return 0;
+}

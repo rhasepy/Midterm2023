@@ -19,10 +19,12 @@
 #define FULL_SEM            "FULL_SEM"
 #define EMPTY_SEM           "EMPTY_SEM"
 #define MUTEX_SEM           "MUTEX_SEM"
+#define AV_WRK_SEM          "AV_WRK_SEM"
 
 #define CLIENT_QUEUE_MEM    "CLIENT_QUEUE_MEM"
+#define AV_WKR_MEM          "AV_WRK_MEM"
 
-#define SHARED_MEM_SIZE     10000*sizeof(int)
+#define SHARED_MEM_SIZE     40000 * sizeof(pid_t)
 
 #define PROT_READ_WRITE PROT_READ | PROT_WRITE
 #define USR_READ_WRITE S_IRUSR | S_IWUSR
@@ -38,5 +40,7 @@
 int char_count(const char* string, char c, size_t size);
 char* time_as_string();
 char** read_file(int fd_, int* lines, const int lock);
+pid_t getClientQueue(pid_t* queue, int len);
+int getQueueDelimetor(pid_t* queue, int target);
 
 #endif
