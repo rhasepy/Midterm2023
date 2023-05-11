@@ -22,35 +22,43 @@
 #define AV_WRK_SEM          "AV_WRK_SEM"
 
 #define CLIENT_QUEUE_MEM    "CLIENT_QUEUE_MEM"
+#define CLIENT_ID_QUEUE     "CLIENT_ID_QUEUE_MEM"
 #define AV_WKR_MEM          "AV_WRK_MEM"
 
 #define SHARED_MEM_SIZE     40000 * sizeof(pid_t)
 
-#define PROT_READ_WRITE PROT_READ | PROT_WRITE
-#define USR_READ_WRITE S_IRUSR | S_IWUSR
+#define PROT_READ_WRITE     PROT_READ | PROT_WRITE
+#define USR_READ_WRITE      S_IRUSR | S_IWUSR
 
 #define REQUEST_BUFFER_SIZE 25600
-#define LNG_BUFFER_SIZE 2048
-#define BUFFER_SIZE 1024
-#define HALF_BUFFER 512
+#define LNG_BUFFER_SIZE     2048
+#define BUFFER_SIZE         1024
+#define HALF_BUFFER         512
+#define SMALL_BUFFER        64
 
-#define FALSE -1
-#define TRUE 0
+#define FALSE               -1
+#define TRUE                 0
 
 enum messageType
 {
+    HELP,
+    LIST,
+    KILL,
     QUIT,
+    READF,
+    WRITEF,
+    UPLOAD,
+    UNKNOWN,
+    DOWNLOAD,
     CONNECT_REQ,
     COMMAND_END,
-    COMMAND_START,
+    WORKER_ENDPOINT,
     TRY_CONNECT_REQ,
     CONNECTION_ACCEPTED,
-    CONNECTION_DECLINED,
-    WORKER_ENDPOINT,
-    UNKNOWN
+    CONNECTION_DECLINED
 };
 
-#define MSG_BUFFER_SIZE 1024 - sizeof(enum messageType)
+#define MSG_BUFFER_SIZE     1024 - sizeof(enum messageType)
 struct message_t
 {
     enum messageType type;
@@ -61,6 +69,7 @@ int char_count(const char* string, char c, size_t size);
 char* time_as_string();
 char** read_file(int fd_, int* lines, const int lock);
 pid_t getClientQueue(pid_t* queue, int len);
+int getClientIdQueue(int* queue, int len);
 int getQueueDelimetor(pid_t* queue, int target);
 
 #endif

@@ -89,6 +89,19 @@ pid_t getClientQueue(pid_t* queue, int len)
     return returnVal;
 }
 
+int getClientIdQueue(int* queue, int len)
+{
+    int returnVal = queue[0];
+
+    // Consume client id from client queue (shifting)
+    for (int i = 0; i < len - 1; ++i) {
+        queue[i] = queue[i + 1];
+    }
+    queue[len - 1] = -1;
+
+    return returnVal;	
+}
+
 int getQueueDelimetor(pid_t* queue, int target)
 {
     for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i) {

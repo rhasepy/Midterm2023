@@ -14,6 +14,7 @@ pid_t* workerPool = NULL;
 int shmFd = -1;
 // TODO: ADDED int* for the client number pair number and pid
 pid_t* clientQueue = NULL;
+int* clientIdQueue = NULL;
 int* availableWorker = NULL;
 
 // -- Semaphore Part -- //
@@ -43,6 +44,7 @@ void cleanupServer()
     sem_unlink(AV_WRK_SEM);
 
     shm_unlink(CLIENT_QUEUE_MEM);
+    shm_unlink(CLIENT_ID_QUEUE);
     shm_unlink(AV_WKR_MEM);
 
     if (TRUE == serverFlag) {
@@ -168,6 +170,25 @@ void initSharedMemories()
     }
     // Init client queue
 
+    // Init client queue for id
+    shmFd = shm_open(CLIENT_ID_QUEUE, O_CREAT | O_RDWR, USR_READ_WRITE);
+    if (shmFd == FALSE) {
+        perror("[ERROR] Shared Mem Create");
+        exit(1);
+    }
+    ftruncate(shmFd, SHARED_MEM_SIZE);
+    
+    clientIdQueue = mmap(NULL, SHARED_MEM_SIZE, PROT_READ_WRITE, MAP_SHARED, shmFd, 0);
+    if (shmFd == FALSE) {
+        perror("[ERROR] Shared Mem mmap");
+        exit(1);
+    }
+
+    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(int); ++i) {
+        clientIdQueue[i] = -1;
+    }
+    // Init client queue for id
+
     // Init worker counter
     shmFd = shm_open(AV_WKR_MEM, O_CREAT | O_RDWR, USR_READ_WRITE);
     if (shmFd == FALSE) {
@@ -233,9 +254,6 @@ int openClientResponseFifo(pid_t clientPid)
     sprintf(clientEndPoint, "CLIENT_%d", clientPid);
     
     int clientFd = open(clientEndPoint, O_WRONLY);
-    if (FALSE == clientFd) {
-        fprintf(stderr, "[WORKER ERROR] Client does not exist!\n");
-    }
     return clientFd;
 }
 
@@ -259,6 +277,7 @@ void serverActivity()
 
     openWorkerFifosDummy();
 
+    int clientId = 1;
     while (1)
     {
         struct message_t msg;
@@ -330,7 +349,8 @@ void serverActivity()
         sem_wait(emptySem);
         sem_wait(mutexSem);
         int queueDelimetor = getQueueDelimetor(clientQueue, -1);
-        clientQueue[queueDelimetor++] = clientPid;
+        clientQueue[queueDelimetor] = clientPid;
+        clientIdQueue[queueDelimetor++] = clientId++;
         sem_post(mutexSem);
         sem_post(fullSem);
     }
@@ -383,7 +403,8 @@ int WorkerMain(int WorkerID)
 
         // Consume client pid for open fifo
         pid_t clientPid = getClientQueue(clientQueue, clientCapacity);
-        
+        int clientId = getClientIdQueue(clientIdQueue, clientCapacity);
+
         // Server knows information about "how much available worker?" thanks to this shared memory
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) - 1;
@@ -395,6 +416,12 @@ int WorkerMain(int WorkerID)
 
         // Open client fifo to send response
         int clientFd = openClientResponseFifo(clientPid);
+        if (FALSE == clientFd) {
+            fprintf(stderr, "[WORKER ERROR] Client does not exist!\n");
+            continue;
+        } else {
+            fprintf(stdout, "Client PID %d connected as \"client%d\"\n", clientPid, clientId);
+        }
 
         // Sending worker fifo domain for client connect to worker about sending request
         struct message_t response, request;
@@ -407,11 +434,12 @@ int WorkerMain(int WorkerID)
         do {
             // Receive client request
             read(workerFd, &request, sizeof(struct message_t));
-            fprintf(stdout, "%s\n", request.content);
+            fprintf(stdout, "%d - %s\n", request.type, request.content);
 
             // Do client request and send response
             sendResponse(clientFd, request);
-        } while (request.type != QUIT);;
+        } while (request.type != QUIT);
+        fprintf(stdout, "client%d diconnected..\n", clientId);
 
         // End of worker task
         sem_wait(mutexAvailableWorker);
