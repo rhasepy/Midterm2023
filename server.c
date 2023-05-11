@@ -89,6 +89,35 @@ void initServerArgs(int argc, char const *argv[])
     }
 }
 
+// Worker side function to create worker fifo
+int createWorkerFifos(int WorkerID)
+{
+    char workerFifoName[HALF_BUFFER];
+    memset(workerFifoName, '\0', HALF_BUFFER);
+    sprintf(workerFifoName, "WORKER_%d", WorkerID);
+
+    umask(0);
+    if (FALSE == mkfifo(workerFifoName, USR_READ_WRITE) && errno != EEXIST) {
+        perror("Fifo can not create...");
+        exit(EXIT_FAILURE);
+    }
+
+    int workerFd = open(workerFifoName, O_RDONLY);
+    if (FALSE == workerFd) {
+        perror("Fifo can not open...");
+        exit(EXIT_FAILURE);
+    }
+
+    // Dummy writer side opened from server
+    
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        perror("Sigpipe ignoring error...\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return workerFd;
+}
+
 void initWorkers()
 {
     workerPool = (pid_t*) calloc(clientCapacity, sizeof(pid_t));
@@ -198,6 +227,18 @@ int createServerFifo()
     return returnFd;
 }
 
+int openClientResponseFifo(pid_t clientPid)
+{
+    char clientEndPoint[HALF_BUFFER];
+    sprintf(clientEndPoint, "CLIENT_%d", clientPid);
+    
+    int clientFd = open(clientEndPoint, O_WRONLY);
+    if (FALSE == clientFd) {
+        fprintf(stderr, "[WORKER ERROR] Client does not exist!\n");
+    }
+    return clientFd;
+}
+
 void openWorkerFifosDummy()
 {
     for (int i = 0; i < clientCapacity; ++i) {
@@ -295,6 +336,18 @@ void serverActivity()
     }
 }
 
+void sendResponse(int fd, struct message_t request)
+{
+    if (request.type == QUIT)
+        return;
+
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(fd, &response, sizeof(struct message_t));
+}
+
 int main(int argc, char const *argv[])
 {   
     atexit(cleanupServer);
@@ -320,28 +373,7 @@ int WorkerMain(int WorkerID)
 {
     serverFlag = FALSE;
 
-    char workerFifoName[HALF_BUFFER];
-    memset(workerFifoName, '\0', HALF_BUFFER);
-    sprintf(workerFifoName, "WORKER_%d", WorkerID);
-
-    umask(0);
-    if (FALSE == mkfifo(workerFifoName, USR_READ_WRITE) && errno != EEXIST) {
-        perror("Fifo can not create...");
-        exit(EXIT_FAILURE);
-    }
-
-    int workerFd = open(workerFifoName, O_RDONLY);
-    if (FALSE == workerFd) {
-        perror("Fifo can not open...");
-        exit(EXIT_FAILURE);
-    }
-
-    // Dummy writer side opened from server
-    
-    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-        perror("Sigpipe ignoring error...\n");
-        exit(EXIT_FAILURE);
-    }
+    int workerFd = createWorkerFifos(WorkerID);
 
     while (1)
     {
@@ -352,6 +384,7 @@ int WorkerMain(int WorkerID)
         // Consume client pid for open fifo
         pid_t clientPid = getClientQueue(clientQueue, clientCapacity);
         
+        // Server knows information about "how much available worker?" thanks to this shared memory
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) - 1;
         sem_post(mutexAvailableWorker);
@@ -360,23 +393,25 @@ int WorkerMain(int WorkerID)
         sem_post(emptySem);
         // End of Synchronization Block
 
-        char clientEndPoint[HALF_BUFFER];
-        sprintf(clientEndPoint, "CLIENT_%d", clientPid);
-        
-        int clientFd = open(clientEndPoint, O_WRONLY);
-        if (FALSE == clientFd) {
-            fprintf(stderr, "[WORKER ERROR] Client does not exist!\n");
-        }
+        // Open client fifo to send response
+        int clientFd = openClientResponseFifo(clientPid);
 
-        struct message_t resp;
-        memset(resp.content, '\0', MSG_BUFFER_SIZE);
-        resp.type = WORKER_ENDPOINT;
-        sprintf(resp.content, "WORKER_%d", WorkerID);
-        write(clientFd, &resp, sizeof(struct message_t));
+        // Sending worker fifo domain for client connect to worker about sending request
+        struct message_t response, request;
+        memset(response.content, '\0', MSG_BUFFER_SIZE);
+        response.type = WORKER_ENDPOINT;
+        sprintf(response.content, "WORKER_%d", WorkerID);
+        write(clientFd, &response, sizeof(struct message_t));
 
-        struct message_t req;
-        read(workerFd, &req, sizeof(struct message_t));
-        fprintf(stdout, "%s\n", req.content);
+        // Receive client request and process request
+        do {
+            // Receive client request
+            read(workerFd, &request, sizeof(struct message_t));
+            fprintf(stdout, "%s\n", request.content);
+
+            // Do client request and send response
+            sendResponse(clientFd, request);
+        } while (request.type != QUIT);;
 
         // End of worker task
         sem_wait(mutexAvailableWorker);

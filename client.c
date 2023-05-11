@@ -1,10 +1,31 @@
 #include "utils.h"
 
+struct message_t response;
+struct message_t command;
 char clientFifo[HALF_BUFFER];
+int workerFd = -1;
 
 void cleanupClient()
 {
+    if (FALSE != workerFd) {
+        command.type = QUIT;
+        write(workerFd, &command, sizeof(struct message_t));
+    }
+
     unlink(clientFifo);
+}
+
+void sigintHandler()
+{
+    exit(1);
+}
+
+void initSignals()
+{
+    struct sigaction sigintAction;
+    memset(&sigintAction, 0, sizeof(sigintAction));
+    sigintAction.sa_handler = &sigintHandler;
+    sigaction(SIGINT, &sigintAction, NULL);
 }
 
 void createFifo()
@@ -50,6 +71,8 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
 
+    initSignals();
+
     sprintf(clientFifo, "CLIENT_%d", getpid());
     createFifo();
 
@@ -78,35 +101,43 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE);
     }
 
-    struct message_t resp;
-    read(clientFd, &resp, sizeof(struct message_t));
-    fprintf(stdout, "Message Type: %d, Message Content: %s\n", resp.type, resp.content);
-    
-    read(clientFd, &resp, sizeof(struct message_t));
-    fprintf(stdout, "Message Type: %d, Message Content: %s\n", resp.type, resp.content);
+    // Get connection accept or not
+    fprintf(stdout, "Waiting for Que..\n");
+    read(clientFd, &response, sizeof(struct message_t));
+    if (response.type == CONNECTION_DECLINED) {
+        fprintf(stdout, "Connection declined...\n");
+        exit(EXIT_SUCCESS);
+    }
 
-    int workerFd;
-    if (resp.type == WORKER_ENDPOINT) {
-        workerFd = open(resp.content, O_WRONLY);
+    // Get worker address to connect worker's fifo
+    read(clientFd, &response, sizeof(struct message_t));
+    if (response.type == WORKER_ENDPOINT) {
+        workerFd = open(response.content, O_WRONLY);
         if (FALSE == workerFd) {
             perror("invalid worker endpoint");
             exit(EXIT_FAILURE);
         }
+        fprintf(stdout, "Connection established:\n");
     } else {
         perror("client do not know worker end point");
         exit(EXIT_FAILURE);
     }
 
-    struct message_t command;
-    scanf("%s", command.content);
-    write(workerFd, &command, sizeof(struct message_t));
+    for (;;) {
+        fprintf(stdout, "Enter comment: ");
+        scanf("%s", command.content);
+        if (strcmp(command.content, "quit") == 0) {
+            exit(EXIT_SUCCESS);
+        } else {
+            command.type = COMMAND_START;
+        }
+        write(workerFd, &command, sizeof(struct message_t));
 
-    sleep(2);
-
-    // Loop:
-        // TODO: Open Worker fifo for write
-        // TODO: Write Command
-        // TODO: Take Response and do it for type
+        do {
+            read(clientFd, &response, sizeof(struct message_t));
+            fprintf(stdout, "%s", response.content);
+        } while (response.type != COMMAND_END);
+    }
 
     return 0;
 }
