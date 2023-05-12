@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <dirent.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,7 @@ enum messageType
     UPLOAD,
     UNKNOWN,
     DOWNLOAD,
+    STRING_MSG,
     CONNECT_REQ,
     COMMAND_END,
     WORKER_ENDPOINT,
@@ -65,8 +67,7 @@ struct message_t
     char content[MSG_BUFFER_SIZE];
 };
 
-void respondList(int respfd, struct message_t req);
-void respondHelp(int respfd, struct message_t req);
+void respondList(int respfd, const char* root);
 void respondReadF(int respfd, struct message_t req);
 void respondWriteF(int respfd, struct message_t req);
 
@@ -74,6 +75,8 @@ void respondWriteF(int respfd, struct message_t req);
 void respondUpload(int respfd, struct message_t req);
 // TODO: will change
 void respondDowload(int respfd, struct message_t req);
+
+void respondHelp(int respfd, struct message_t req);
 void respondEnd(int respfd);
 void respondUnknown(int respfd);
 

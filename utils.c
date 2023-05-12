@@ -154,13 +154,87 @@ void respondHelp(int respfd, struct message_t req)
 	write(respfd, &response, sizeof(struct message_t));
 }
 
-void respondList(int respfd, struct message_t req)
+void respondUnknown(int respfd)
 {
-    struct message_t response;
-    memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+	struct message_t msg;
+	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
+	msg.type = COMMAND_END;
+	
+	sprintf(msg.content, "Unknown..\n");
+	write(respfd, &msg, sizeof(struct message_t));
+}
+
+void respondEnd(int respfd)
+{
+	struct message_t msg;
+	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
+	msg.type = COMMAND_END;
+	write(respfd, &msg, sizeof(struct message_t));
+}
+
+void sendStr(int respfd, const char* str)
+{
+	struct message_t msg;
+	memset(msg.content, '\0', MSG_BUFFER_SIZE);
+	msg.type = STRING_MSG;
+
+	sprintf(msg.content, "%s", str);
+	write(respfd, &msg, sizeof(struct message_t));
+}
+
+void listFilesAndDirectories(int respfd, const char* path, int level) {
+    DIR *dir;
+    struct dirent *entry;
+    struct stat fileStat;
+
+    // Open the directory
+    dir = opendir(path);
+    if (dir == NULL) {
+        printf("Unable to open directory: %s\n", path);
+		respondUnknown(respfd);
+        return;
+    }
+
+    // Read directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        char filePath[BUFFER_SIZE];
+		memset(filePath, '\0', BUFFER_SIZE);
+        snprintf(filePath, sizeof(filePath), "%s/%s", path, entry->d_name);
+
+        // Get file/directory information
+        if (stat(filePath, &fileStat) < 0)
+            continue;
+
+		if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
+			
+			int indentCtr = level + 1;
+			sendStr(respfd, "|");
+
+			if (S_ISDIR(fileStat.st_mode))
+				--indentCtr;
+
+			for (int i = 0; i < indentCtr; i++)
+				sendStr(respfd, "-");
+
+			char temp[HALF_BUFFER];
+			memset(temp, '\0', HALF_BUFFER);
+			sprintf(temp, "%s\n", entry->d_name);
+			sendStr(respfd, temp);
+		}
+
+        // Recursively call for subdirectories (excluding . and ..)
+        if (S_ISDIR(fileStat.st_mode) && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+            listFilesAndDirectories(respfd, filePath, level + 1);
+    }
+
+    // Close the directory
+    closedir(dir);
+}
+
+void respondList(int respfd, const char* root)
+{
+	listFilesAndDirectories(respfd, root, 0);
+	respondEnd(respfd);
 }
 
 void respondReadF(int respfd, struct message_t req)
@@ -181,7 +255,6 @@ void respondWriteF(int respfd, struct message_t req)
     write(respfd, &response, sizeof(struct message_t));
 }
 
-
 // TODO: will change
 void respondUpload(int respfd, struct message_t req)
 {
@@ -200,22 +273,4 @@ void respondDowload(int respfd, struct message_t req)
     response.type = COMMAND_END;
     sprintf(response.content, "DUMMY RESPONSE\n");
     write(respfd, &response, sizeof(struct message_t));
-}
-
-void respondUnknown(int respfd)
-{
-	struct message_t msg;
-	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
-	msg.type = COMMAND_END;
-	
-	sprintf(msg.content, "Unknown request..\n");
-	write(respfd, &msg, sizeof(struct message_t));
-}
-
-void respondEnd(int respfd)
-{
-	struct message_t msg;
-	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
-	msg.type = COMMAND_END;
-	write(respfd, &msg, sizeof(struct message_t));
 }

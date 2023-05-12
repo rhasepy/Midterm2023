@@ -73,7 +73,6 @@ void sigintHandler()
     exit(1);
 }
 
-// TODO: Check directory exist or not
 void initServerArgs(int argc, char const *argv[])
 {
     if (argc != 3) {
@@ -82,7 +81,15 @@ void initServerArgs(int argc, char const *argv[])
     }
 
     sprintf(workingDirectory, "%s", argv[1]);
-    // todo implementation here
+
+    struct stat st = {0};
+    if (FALSE == stat(workingDirectory, &st)) {
+        int result = mkdir(workingDirectory, 0777);
+        if (FALSE == result) {
+            perror("error creating directory");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     clientCapacity = atoi(argv[2]);
     if (clientCapacity == 0) {
@@ -117,7 +124,6 @@ int createWorkerFifos(int WorkerID)
     }
 
     // Dummy writer side opened from server
-    
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         perror("Sigpipe ignoring error...\n");
         exit(EXIT_FAILURE);
@@ -367,7 +373,7 @@ int sendResponse(int fd, struct message_t request)
     if (request.type == HELP) {
         respondHelp(fd, request);
     } else if (request.type == LIST) {
-        respondList(fd, request);
+        respondList(fd, workingDirectory);
     } else if (request.type == READF) {
         respondReadF(fd, request);
     }  else if (request.type == WRITEF)  {
@@ -395,17 +401,12 @@ int main(int argc, char const *argv[])
     atexit(cleanupServer);
 
     initServerArgs(argc, argv);
-
     initSignals();
-
     initSharedMemories();
-
     initSemaphores();
-
     initWorkers();
 
     serverActivity();
-
     waitAllWorkers();
 
     return 0;
@@ -416,7 +417,6 @@ int WorkerMain(int WorkerID)
     serverFlag = FALSE;
 
     int workerFd = createWorkerFifos(WorkerID);
-
     while (1)
     {
         // Begining of Synchronization Block
