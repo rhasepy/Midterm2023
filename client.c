@@ -5,12 +5,12 @@ char clientFifo[HALF_BUFFER];
 
 void cleanupClient()
 {
-    struct message_t command;
+    /*struct message_t command;
     memset(command.content, '\0', MSG_BUFFER_SIZE);
     if (FALSE != workerFd) {
         command.type = QUIT;
         write(workerFd, &command, sizeof(struct message_t));
-    }
+    }*/
 
     unlink(clientFifo);
 }
@@ -196,16 +196,15 @@ int main(int argc, char const *argv[])
         char userInput[HALF_BUFFER];
         memset(userInput, '\0', HALF_BUFFER);
         fprintf(stdout, "Enter comment: ");
-        scanf("%s", userInput);
-        
-        // check command quit or not
-        if (strcmp(userInput, "quit") == 0) {
-            exit(EXIT_SUCCESS);
-        } 
+        fgets(userInput, HALF_BUFFER, stdin); 
 
         // prepare and send request to worker
         struct message_t command = prepareCommand(userInput);
         write(workerFd, &command, sizeof(struct message_t));
+
+	if (command.type == QUIT) {
+		exit(EXIT_SUCCESS);
+	}
 
         // retrieve responses from worker
         do {    
