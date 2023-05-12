@@ -97,25 +97,25 @@ struct message_t prepareCommand(const char* input)
 
     sscanf(tokenizerStr, "%s %s %s %s", command, param1, param2, param3);
 
-    if (strcmp(command, "help")) {
+    if (strcmp(command, "help") == 0) {
         commandRequest.type = HELP;
-    } else if (strcmp(command, "list")) {
+    } else if (strcmp(command, "list") == 0) {
         commandRequest.type = LIST;
-    } else if (strcmp(command, "readF")) {
+    } else if (strcmp(command, "readF") == 0) {
         commandRequest.type = READF;
         sprintf(commandRequest.content, "%s %s", param1, param2);
-    } else if (strcmp(command, "writeF")) {
+    } else if (strcmp(command, "writeF") == 0) {
         commandRequest.type = WRITEF;
         sprintf(commandRequest.content, "%s %s %s", param1, param2, param3);
-    } else if (strcmp(command, "upload")) {
+    } else if (strcmp(command, "upload") == 0) {
         commandRequest.type = UPLOAD;
         sprintf(commandRequest.content, "%s", param1);
-    } else if (strcmp(command, "download")) {
+    } else if (strcmp(command, "download") == 0) {
         commandRequest.type = DOWNLOAD;
         sprintf(commandRequest.content, "%s", param1);
-    } else if (strcmp(command, "quit")) {
+    } else if (strcmp(command, "quit") == 0) {
         commandRequest.type = QUIT;
-    } else if (strcmp(command, "killServer")) {
+    } else if (strcmp(command, "killServer") == 0) {
         commandRequest.type = KILL;
     }
 
@@ -196,12 +196,6 @@ int main(int argc, char const *argv[])
         char userInput[HALF_BUFFER];
         memset(userInput, '\0', HALF_BUFFER);
         fprintf(stdout, "Enter comment: ");
-
-        // TODO: taking all input from terminal
-        if (fgets(userInput, sizeof(HALF_BUFFER), stdin))
-            userInput[strcspn(userInput, "\n")] = '\0';
-
-
         scanf("%s", userInput);
         
         // check command quit or not
