@@ -5,13 +5,13 @@ char clientFifo[HALF_BUFFER];
 
 void cleanupClient()
 {
-    /*struct message_t command;
-    memset(command.content, '\0', MSG_BUFFER_SIZE);
-    if (FALSE != workerFd) {
-        command.type = QUIT;
-        write(workerFd, &command, sizeof(struct message_t));
-    }*/
+    if (FALSE !=  workerFd) {
+        struct message_t quitMsg;
+        memset(quitMsg.content, '\0', MSG_BUFFER_SIZE);
+        quitMsg.type = QUIT;
 
+        write(workerFd, &quitMsg,  sizeof(struct message_t));
+    }
     unlink(clientFifo);
 }
 
@@ -99,6 +99,7 @@ struct message_t prepareCommand(const char* input)
 
     if (strcmp(command, "help") == 0) {
         commandRequest.type = HELP;
+        sprintf(commandRequest.content, "%s", param1);
     } else if (strcmp(command, "list") == 0) {
         commandRequest.type = LIST;
     } else if (strcmp(command, "readF") == 0) {
@@ -202,16 +203,22 @@ int main(int argc, char const *argv[])
         struct message_t command = prepareCommand(userInput);
         write(workerFd, &command, sizeof(struct message_t));
 
-	if (command.type == QUIT) {
-		exit(EXIT_SUCCESS);
-	}
-
         // retrieve responses from worker
         do {    
             read(clientFd, &response, sizeof(struct message_t));
             fprintf(stdout, "%s", response.content);
         } while (response.type != COMMAND_END);
-    }
 
+        // if the  server send OK message and my request quit or kill
+        // then client exiting
+        if (command.type == QUIT) {
+            // TODO: Retrieve log file
+            workerFd = FALSE;
+            exit(EXIT_SUCCESS);
+        } else if (command.type == KILL) {
+            workerFd = FALSE;
+            exit(EXIT_SUCCESS);
+        }
+    }
     return 0;
 }

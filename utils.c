@@ -76,7 +76,7 @@ char** read_file(int fd_, int* lines, const int lock)
 	return parsed_file;	
 }
 
-pid_t getClientQueue(pid_t* queue, int len)
+pid_t getAndShiftPID(pid_t* queue, int len)
 {
     pid_t returnVal = queue[0];
 
@@ -89,7 +89,7 @@ pid_t getClientQueue(pid_t* queue, int len)
     return returnVal;
 }
 
-int getClientIdQueue(int* queue, int len)
+int getAndShiftInt(int* queue, int len)
 {
     int returnVal = queue[0];
 
@@ -102,7 +102,7 @@ int getClientIdQueue(int* queue, int len)
     return returnVal;	
 }
 
-int getQueueDelimetor(pid_t* queue, int target)
+int findIndex(pid_t* queue, int target)
 {
     for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i) {
         if (queue[i] == target) {
@@ -110,4 +110,79 @@ int getQueueDelimetor(pid_t* queue, int target)
         }
     }
     return 0;
+}
+
+void respondList(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+void respondHelp(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+void respondReadF(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+void respondWriteF(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+
+// TODO: will change
+void respondUpload(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+// TODO: will change
+void respondDowload(int respfd, struct message_t req)
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
+    response.type = COMMAND_END;
+    sprintf(response.content, "DUMMY RESPONSE\n");
+    write(respfd, &response, sizeof(struct message_t));
+}
+
+void respondUnknown(int respfd)
+{
+	struct message_t msg;
+	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
+	msg.type = COMMAND_END;
+	
+	sprintf(msg.content, "Unknown request..\n");
+	write(respfd, &msg, sizeof(struct message_t));
+}
+
+void respondEnd(int respfd)
+{
+	struct message_t msg;
+	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
+	msg.type = COMMAND_END;
+	write(respfd, &msg, sizeof(struct message_t));
 }

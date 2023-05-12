@@ -91,6 +91,12 @@ void initServerArgs(int argc, char const *argv[])
     }
 }
 
+// TODO: request to server to kill system
+void killServer()
+{
+    fprintf(stdout, "Log\n");
+}
+
 // Worker side function to create worker fifo
 int createWorkerFifos(int WorkerID)
 {
@@ -348,7 +354,7 @@ void serverActivity()
         // Enqueued client synchronized block
         sem_wait(emptySem);
         sem_wait(mutexSem);
-        int queueDelimetor = getQueueDelimetor(clientQueue, -1);
+        int queueDelimetor = findIndex(clientQueue, -1);
         clientQueue[queueDelimetor] = clientPid;
         clientIdQueue[queueDelimetor++] = clientId++;
         sem_post(mutexSem);
@@ -356,16 +362,32 @@ void serverActivity()
     }
 }
 
-void sendResponse(int fd, struct message_t request)
+int sendResponse(int fd, struct message_t request)
 {
-    if (request.type == QUIT)
-        return;
+    if (request.type == HELP) {
+        respondHelp(fd, request);
+    } else if (request.type == LIST) {
+        respondList(fd, request);
+    } else if (request.type == READF) {
+        respondReadF(fd, request);
+    }  else if (request.type == WRITEF)  {
+        respondWriteF(fd, request);
+    } else if (request.type == UPLOAD) {
+        respondUpload(fd, request);
+    } else if (request.type ==  DOWNLOAD) {
+        respondDowload(fd, request);
+    } else if (request.type == QUIT) {
+        respondEnd(fd);
+        return FALSE;
+    } else if (request.type == KILL) {
+        killServer();
+        respondEnd(fd);
+        return FALSE;
+    } else {
+        respondUnknown(fd);
+    }
 
-    struct message_t response;
-    memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(fd, &response, sizeof(struct message_t));
+    return TRUE;
 }
 
 int main(int argc, char const *argv[])
@@ -402,8 +424,8 @@ int WorkerMain(int WorkerID)
         sem_wait(mutexSem);
 
         // Consume client pid for open fifo
-        pid_t clientPid = getClientQueue(clientQueue, clientCapacity);
-        int clientId = getClientIdQueue(clientIdQueue, clientCapacity);
+        pid_t clientPid = getAndShiftPID(clientQueue, clientCapacity);
+        int clientId = getAndShiftInt(clientIdQueue, clientCapacity);
 
         // Server knows information about "how much available worker?" thanks to this shared memory
         sem_wait(mutexAvailableWorker);
@@ -437,8 +459,7 @@ int WorkerMain(int WorkerID)
             fprintf(stdout, "%d - %s\n", request.type, request.content);
 
             // Do client request and send response
-            sendResponse(clientFd, request);
-        } while (request.type != QUIT);
+        } while (FALSE != sendResponse(clientFd, request));
         fprintf(stdout, "client%d diconnected..\n", clientId);
 
         // End of worker task
