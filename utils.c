@@ -112,16 +112,49 @@ int findIndex(pid_t* queue, int target)
     return 0;
 }
 
-void respondList(int respfd, struct message_t req)
+void respondHelp(int respfd, struct message_t req)
 {
-    struct message_t response;
+	char param[SMALL_BUFFER];
+	memset(param, '\0', SMALL_BUFFER);
+	sscanf(req.content, "%s", param);
+
+	struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+
+	// if the client request help supported commands
+	if (strcmp(param, "XX") == 0) {
+		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeT, upload, download, quit, killServer\n\n");
+		response.type = COMMAND_END;
+		write(respfd, &response, sizeof(struct message_t));
+		return;
+	}
+
+	// if the client request help about command usage
+	if (strcmp(param, "help") == 0) {
+		sprintf(response.content, "help <command> (optional)\n\tshows that available command\n\thelp <command> shows that usage of command\n\n");
+	} else if (strcmp(param, "list") == 0) {
+		sprintf(response.content, "list\n\tshows that available all files from server side\n\n");
+	} else if (strcmp(param, "readF") == 0) {
+		sprintf(response.content, "readF <file> <line#>\n\tdisplay the #th line of the <file>, returns with an error if <file> does not exists\n\n");
+	} else if (strcmp(param, "writeF") == 0) {
+		sprintf(response.content, "writeF <file> <line#> <string>\n\tput <string> the #th line of the <file>, If the file does not exists in Servers directory creates and edits the file at the same time\n\n");
+	} else if (strcmp(param, "upload") == 0) {
+		sprintf(response.content, "upload <file>\n\tupload <file> to server side from client side\n\n");
+	} else if (strcmp(param, "download") == 0) {	
+		sprintf(response.content, "download <file>\n\tdownload <file> from server side to client side\n\n");
+	} else if (strcmp(param, "quit") == 0) {
+		sprintf(response.content, "quit\n\tSend write request to Server side log file and quits\n\n");
+	} else if (strcmp(param, "killServer") == 0) {
+		sprintf(response.content, "killServer\n\tSends a kill request to the Server\n\n");
+	} else {
+		sprintf(response.content, "Unknown parameter for help\n\n");
+	}
+
+	response.type = COMMAND_END;
+	write(respfd, &response, sizeof(struct message_t));
 }
 
-void respondHelp(int respfd, struct message_t req)
+void respondList(int respfd, struct message_t req)
 {
     struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);
