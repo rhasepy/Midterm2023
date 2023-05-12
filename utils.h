@@ -67,24 +67,25 @@ struct message_t
     char content[MSG_BUFFER_SIZE];
 };
 
-void respondList(int respfd, const char* root);
-void respondReadF(int respfd, struct message_t req);
-void respondWriteF(int respfd, struct message_t req);
 
-// TODO: will change
-void respondUpload(int respfd, struct message_t req);
-// TODO: will change
-void respondDowload(int respfd, struct message_t req);
-
-void respondHelp(int respfd, struct message_t req);
 void respondEnd(int respfd);
 void respondUnknown(int respfd);
+void sendStr(int respfd, const char* str);
+void respondList(int respfd, const char* root);
+void respondHelp(int respfd, struct message_t req);
+void respondReadF(int respfd, struct message_t req);
+void respondWriteF(int respfd, struct message_t req);
+void respondUpload(int respfd, struct message_t req);
+void respondDowload(int respfd, struct message_t req);
+void listFilesAndDirectories(int respfd, const char* path, int level);
 
-int char_count(const char* string, char c, size_t size);
 char* time_as_string();
 char** read_file(int fd_, int* lines, const int lock);
-pid_t getAndShiftPID(pid_t* queue, int len);
+
 int getAndShiftInt(int* queue, int len);
 int findIndex(pid_t* queue, int target);
+int char_count(const char* string, char c, size_t size);
+
+pid_t getAndShiftPID(pid_t* queue, int len);
 
 #endif
