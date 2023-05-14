@@ -140,13 +140,24 @@ void runClientApp()
         fprintf(stdout, "Enter comment: ");
         fgets(userInput, HALF_BUFFER, stdin); 
 
-        // prepare and send request to worker
-        struct message_t command = prepareCommand(userInput);
-        write(workerFd, &command, sizeof(struct message_t));
-        
         // retrieve responses from worker
         int downloadedFd = -1;
-        //int uploadedFd = -1;
+        int uploadedFd = -1;
+
+        // prepare and send request to worker
+        struct message_t command = prepareCommand(userInput);
+        if (command.type == UPLOAD) {
+            uploadedFd = open(command.content, O_RDONLY);
+            if (FALSE == uploadedFd) {
+                perror("File open error");
+                continue;
+            }
+        }
+        write(workerFd, &command, sizeof(struct message_t));
+        
+        if (command.type == KILL)
+            exit(EXIT_SUCCESS);
+
         do {
             memset(response.content, '\0', MSG_BUFFER_SIZE);
             read(clientFd, &response, sizeof(struct message_t));
@@ -170,6 +181,39 @@ void runClientApp()
 
             } else if (response.type == FILE_CONTENT) {
                 write(downloadedFd, response.content, MSG_BUFFER_SIZE);
+            } else if (response.type == UPLOAD_OK) {
+
+                size_t fileSize;
+	            char* content = readFileAs1D(uploadedFd, &fileSize);
+
+                // whole line sending with 1024 byte chunks.
+                for (int i = 0; i < fileSize; i += MSG_BUFFER_SIZE) {
+                    // chunk data
+                    char buffer[MSG_BUFFER_SIZE];
+                    memset(buffer, '\0', MSG_BUFFER_SIZE);
+
+                    // if the remianig chunk less than MSG BUFFER SIZE then does not write MSG BUFFER SIZE
+                    if ((fileSize - i) > MSG_BUFFER_SIZE) {
+                        strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
+                        buffer[MSG_BUFFER_SIZE - 1] = '\0';
+                    } else {
+                        strncpy(buffer, content + i, fileSize - i);
+                        buffer[fileSize - i] = '\0';
+                    }
+
+                    // send chunk data
+                    response.type = FILE_CONTENT;
+                    sprintf(response.content, "%s", buffer);
+                    write(workerFd, &response, sizeof(struct message_t));
+                }
+                sendOneMsg(workerFd, "Transfer finished\n");
+
+                memset(response.content, '\0', MSG_BUFFER_SIZE);
+                read(clientFd, &response, sizeof(struct message_t));
+                fprintf(stdout, "%s", response.content);
+
+                free(content);
+
             } else {
                 fprintf(stdout, "%s", response.content);
             }
@@ -179,10 +223,6 @@ void runClientApp()
         // if the  server send OK message and my request quit or kill
         // then client exiting
         if (command.type == QUIT) {
-            // TODO: Retrieve log file
-            workerFd = FALSE;
-            exit(EXIT_SUCCESS);
-        } else if (command.type == KILL) {
             workerFd = FALSE;
             exit(EXIT_SUCCESS);
         }

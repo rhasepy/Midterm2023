@@ -52,6 +52,7 @@ enum messageType
     UNKNOWN,
     FILENAME,
     DOWNLOAD,
+    UPLOAD_OK,
     STRING_MSG,
     CONNECT_REQ,
     COMMAND_END,

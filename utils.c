@@ -510,7 +510,6 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 	clearFileContent(fileContent, lineSize);
 }
 
-// TODO: special file will be handle
 void respondDowload(int respfd, int workerFd, struct message_t req, const char* root)
 {
 	char fullPath[BUFFER_SIZE];
@@ -555,8 +554,15 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 		// chunk data
 		char buffer[MSG_BUFFER_SIZE];
 		memset(buffer, '\0', MSG_BUFFER_SIZE);
-		strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
-		buffer[MSG_BUFFER_SIZE - 1] = '\0';
+
+		// if the remianig chunk less than MSG BUFFER SIZE then does not write MSG BUFFER SIZE
+		if ((fileSize - i) > MSG_BUFFER_SIZE) {
+			strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
+			buffer[MSG_BUFFER_SIZE - 1] = '\0';
+		} else {
+			strncpy(buffer, content + i, fileSize - i);
+			buffer[fileSize - i] = '\0';
+		}
 
 		// send chunk data
 		downloadResponse.type = FILE_CONTENT;
@@ -574,9 +580,40 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 
 void respondUpload(int respfd, int workerFd, struct message_t req, const char* root)
 {
-    struct message_t response;
+	// Get file name from request
+	char fullPath[BUFFER_SIZE];
+	memset(fullPath, '\0', BUFFER_SIZE);
+	sprintf(fullPath, "%s/%s", root, req.content);
+
+	// If the file exist in server then send error message to client
+	if (access(fullPath, F_OK) == TRUE) {
+		sendOneMsg(respfd, "File already exist...\n");
+		return;		
+	}
+
+	int fd = open(fullPath, O_CREAT | O_WRONLY, USR_READ_WRITE);
+	if (FALSE == fd) {
+		sendOneMsg(respfd, "Undefined error while file creating...\n");
+		return;
+	}
+
+	// Send confirmation message to start uploading file
+	struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+    response.type = UPLOAD_OK;
+    sprintf(response.content, "Send me file\n");
+    write(respfd, &response, sizeof(struct message_t));	
+
+	// And read client fifo untill command end
+	struct message_t clientMsg;
+	memset(clientMsg.content, '\0', MSG_BUFFER_SIZE);
+	do {
+
+		read(workerFd, &clientMsg, sizeof(struct message_t));
+		if (clientMsg.type == FILE_CONTENT)
+			write(fd, clientMsg.content, strlen(clientMsg.content));
+
+	} while (clientMsg.type != COMMAND_END);
+
+	sendOneMsg(respfd, "Upload OK!\n");
 }

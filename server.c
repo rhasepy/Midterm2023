@@ -7,6 +7,8 @@ int clientCapacity = 0;
 char fifoName[HALF_BUFFER];
 char workingDirectory[SMALL_BUFFER];
 
+int isSigint = FALSE;
+
 // -- Worker Processes -- //
 pid_t* workerPool = NULL;
 pid_t parentPid;
@@ -25,14 +27,23 @@ sem_t* mutexSem;
 sem_t* mutexAvailableWorker;
 
 // -- Worker Part -- //
-int WorkerMain();
+int WorkerMain(int WorkerID);
 // ####################### -- ####################### -- ####################### -- ####################### //
+
+void waitAllWorkers()
+{
+    for (int i = 0; i < clientCapacity; ++i) {
+        int status;
+        waitpid(workerPool[i], &status, 0);
+    }
+}
 
 void cleanupServer()
 {
-    if (workerPool != NULL) {
-        free(workerPool);
-    }
+    for (int i = 0; i < clientCapacity; ++i)
+        kill(workerPool[i], SIGINT);
+
+    waitAllWorkers();
 
     sem_close(emptySem);
     sem_close(fullSem);
@@ -52,6 +63,10 @@ void cleanupServer()
         unlink(fifoName);
     }
 
+    if (workerPool != NULL) {
+        free(workerPool);
+    }
+
     for (int i = 0; i < clientCapacity; ++i) {
         char workerFifoName[HALF_BUFFER];
         sprintf(workerFifoName, "WORKER_%d", i);
@@ -59,19 +74,12 @@ void cleanupServer()
     }
 }
 
-void waitAllWorkers()
-{
-    for (int i = 0; i < clientCapacity; ++i) {
-
-        int status;
-        waitpid(workerPool[i], &status, 0);
-    }
-}
-
-// TODO: Signal Handler will be implement
 void sigintHandler()
 {
-    exit(1);
+    if (isSigint == FALSE) {
+        isSigint = TRUE;
+        exit(1);
+    }  
 }
 
 void initServerArgs(int argc, char const *argv[])
@@ -99,10 +107,9 @@ void initServerArgs(int argc, char const *argv[])
     }
 }
 
-// TODO: request to server to kill system
 void killServer()
 {
-    fprintf(stdout, "Log\n");
+    kill(parentPid, SIGINT);
 }
 
 // Worker side function to create worker fifo
@@ -388,7 +395,6 @@ int sendResponse(int fd, int workerFd, struct message_t request)
         return FALSE;
     } else if (request.type == KILL) {
         killServer();
-        respondEnd(fd);
         return FALSE;
     } else {
         sendOneMsg(fd, "Unknown request...\n");
