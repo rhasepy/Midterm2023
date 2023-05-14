@@ -5,7 +5,7 @@
 int serverFlag = TRUE;
 int clientCapacity = 0;
 char fifoName[HALF_BUFFER];
-char workingDirectory[HALF_BUFFER];
+char workingDirectory[SMALL_BUFFER];
 
 // -- Worker Processes -- //
 pid_t* workerPool = NULL;
@@ -80,7 +80,7 @@ void initServerArgs(int argc, char const *argv[])
     	_exit(EXIT_FAILURE);
     }
 
-    sprintf(workingDirectory, "%s", argv[1]);
+    sprintf(workingDirectory, "%s/", argv[1]);
 
     struct stat st = {0};
     if (FALSE == stat(workingDirectory, &st)) {
@@ -375,9 +375,9 @@ int sendResponse(int fd, struct message_t request)
     } else if (request.type == LIST) {
         respondList(fd, workingDirectory);
     } else if (request.type == READF) {
-        respondReadF(fd, request);
+        respondReadF(fd, request, workingDirectory);
     }  else if (request.type == WRITEF)  {
-        respondWriteF(fd, request);
+        respondWriteF(fd, request, workingDirectory);
     } else if (request.type == UPLOAD) {
         respondUpload(fd, request);
     } else if (request.type ==  DOWNLOAD) {
@@ -390,7 +390,7 @@ int sendResponse(int fd, struct message_t request)
         respondEnd(fd);
         return FALSE;
     } else {
-        respondUnknown(fd);
+        sendOneMsg(fd, "Unknown request...\n");
     }
 
     return TRUE;

@@ -1,6 +1,15 @@
 #include "utils.h"
 
-char* time_as_string()
+void char2DToFile(int fd, char** content, int size)
+{
+	for (int i = 0; i < size; ++i) {
+		write(fd, content[i], strlen(content[i]));
+		if (i < (size - 1))
+			write(fd, "\n", 1);
+	}	
+}
+
+char* timeAsString()
 {
 	time_t t = time(NULL);
   	struct tm tm = *localtime(&t);
@@ -12,7 +21,7 @@ char* time_as_string()
 	return as_string;
 }
 
-int char_count(const char* string, char c, size_t size)
+int charCount(const char* string, char c, size_t size)
 {	
 	int ctr = 0;
 
@@ -22,24 +31,16 @@ int char_count(const char* string, char c, size_t size)
 	return ctr;
 }
 
-char** read_file(int fd_, int* lines, const int lock)
+char** readFile(int fd_, int* lines)	
 {	
-	struct flock file_lock;
 	int fd = fd_;
 
-	if(0 == lock) {
-
-		memset(&file_lock,0,sizeof(file_lock));
-		file_lock.l_type = F_WRLCK;
-		fcntl(fd,F_SETLKW,&file_lock);		
-	}
 	lseek(fd,0,SEEK_SET);
-
 	size_t size = lseek(fd,0,SEEK_END);
 	if(size <= 0) {
+		*lines = 0;
 		close(fd);
-        perror("File Read Error (Empty or Null File)");
-        exit(-1);
+		return NULL;
 	}
 
 	lseek(fd,0,SEEK_SET);
@@ -47,17 +48,13 @@ char** read_file(int fd_, int* lines, const int lock)
 	read(fd,readed_file,size);
 	readed_file[size] = '\0';
 
-	int line_size = char_count(readed_file,'\n',size) + 1;
+	int line_size = charCount(readed_file,'\n',size) + 1;
 	char** parsed_file = (char**)calloc(sizeof(char*),line_size);
 	
 	int index = 0;
 	char * token = strtok(readed_file,"\n");
-	while(token != NULL)
-	{	
-		int size = strlen(token) + 1;
-		// Added
-		size = 5096;
-		
+	while(token != NULL) {	
+		int size = strlen(token) + 1;		
 		parsed_file[index] = (char*)calloc(size, sizeof(char));
 		strcpy(parsed_file[index],token);
 		++index;		
@@ -68,12 +65,14 @@ char** read_file(int fd_, int* lines, const int lock)
 	free(readed_file);
 	*lines = index;
 
-	if(0 == lock) {
-		file_lock.l_type = F_UNLCK;
-		fcntl(fd,F_SETLKW,&file_lock);
-	}
-
 	return parsed_file;	
+}
+
+void clearFileContent(char** data, int len)
+{
+	for (int i = 0; i < len; ++i)
+		free(data[i]);
+	free(data);
 }
 
 pid_t getAndShiftPID(pid_t* queue, int len)
@@ -118,7 +117,7 @@ void sendStr(int respfd, const char* str)
 	memset(msg.content, '\0', MSG_BUFFER_SIZE);
 	msg.type = STRING_MSG;
 
-	sprintf(msg.content, "%s", str);
+	sprintf(msg.content, "%s\n", str);
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
@@ -131,8 +130,10 @@ void listFilesAndDirectories(int respfd, const char* path, int level)
     // Open the directory
     dir = opendir(path);
     if (dir == NULL) {
-        printf("Unable to open directory: %s\n", path);
-		respondUnknown(respfd);
+		char temp[SMALL_BUFFER];
+		memset(temp, '\0', SMALL_BUFFER);
+		sprintf(temp, "Unable to open directory: %s\n", path);
+		sendOneMsg(respfd, temp);
         return;
     }
 
@@ -214,13 +215,13 @@ void respondHelp(int respfd, struct message_t req)
 	write(respfd, &response, sizeof(struct message_t));
 }
 
-void respondUnknown(int respfd)
+void sendOneMsg(int respfd, const char* content)
 {
 	struct message_t msg;
 	memset(msg.content, '\0',  MSG_BUFFER_SIZE);
 	msg.type = COMMAND_END;
 	
-	sprintf(msg.content, "Unknown..\n");
+	sprintf(msg.content, "%s\n", content);
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
@@ -238,24 +239,184 @@ void respondList(int respfd, const char* root)
 	respondEnd(respfd);
 }
 
-// TODO: will implement
-void respondReadF(int respfd, struct message_t req)
+void respondReadF(int respfd, struct message_t req, const char* root)
 {
-    struct message_t response;
-    memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+	char param[HALF_BUFFER];
+	memset(param, '\0', HALF_BUFFER);
+	char param2[HALF_BUFFER];
+	memset(param2, '\0', HALF_BUFFER);
+	sscanf(req.content, "%s %s", param, param2);
+
+	char fileFullPath[BUFFER_SIZE];
+	memset(fileFullPath, '\0', BUFFER_SIZE);
+	sprintf(fileFullPath, "%s/%s", root, param);
+
+	int fd = open(fileFullPath, O_RDONLY);
+	if (FALSE == fd) {
+		sendOneMsg(respfd, "File does not exist!\n");
+		return;
+	}
+
+	// lock file
+	struct flock file_lock;
+	memset(&file_lock,0,sizeof(file_lock));
+	file_lock.l_type = F_WRLCK;
+	fcntl(fd,F_SETLKW,&file_lock);		
+
+	int fileLine = -1;
+	char** fileContent = readFile(fd, &fileLine);
+
+	// if parameter does not exist then send whole file
+	if (strcmp(param2, "XX") == 0) {
+
+		// whole file iterating
+		for (int i = 0; i < fileLine; ++i) {
+
+			// whole line sending with 1024 byte chunks.
+			for (int j = 0; j < strlen(fileContent[i]); j += MSG_BUFFER_SIZE) {
+				char buffer[MSG_BUFFER_SIZE];
+				memset(buffer, '\0', MSG_BUFFER_SIZE);
+				strncpy(buffer, fileContent[i] + j, MSG_BUFFER_SIZE - 1);
+				buffer[MSG_BUFFER_SIZE - 1] = '\0';
+				sendStr(respfd, buffer);
+			}
+		}
+		// send end of response to client
+		sendOneMsg(respfd, "");
+		clearFileContent(fileContent, fileLine);
+
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+		close(fd);
+		return;
+	}
+
+	// if the line parameter exist then check line valid or not
+	int line = atoi(param2) - 1;
+	if (line >= fileLine || line < 0) {
+		sendOneMsg(respfd, "File line number too big or too low...\n");
+		clearFileContent(fileContent, fileLine);
+		
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+		close(fd);
+		return;
+	}
+
+	// custom line sending with 1024 byte chunks. (line may be greater than 1024 byte)
+	for (int j = 0; j < strlen(fileContent[line]); j += MSG_BUFFER_SIZE) {
+		char buffer[MSG_BUFFER_SIZE];
+		memset(buffer, '\0', MSG_BUFFER_SIZE);
+		strncpy(buffer, fileContent[line] + j, MSG_BUFFER_SIZE - 1);
+		buffer[MSG_BUFFER_SIZE - 1] = '\0';
+		sendStr(respfd, buffer);
+	}
+	// send end of response to client
+	sendOneMsg(respfd, "");
+	clearFileContent(fileContent, fileLine);
+
+	// unlock file
+	file_lock.l_type = F_UNLCK;
+	fcntl(fd,F_SETLKW,&file_lock);
+	close(fd);
 }
 
-// TODO: will implement
-void respondWriteF(int respfd, struct message_t req)
+void respondWriteF(int respfd, struct message_t req, const char* root)
 {
-    struct message_t response;
-    memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+	char param[HALF_BUFFER];
+	memset(param, '\0', HALF_BUFFER);
+	char param2[HALF_BUFFER];
+	memset(param2, '\0', HALF_BUFFER);
+	char param3[HALF_BUFFER];
+	memset(param3, '\0', HALF_BUFFER);
+
+	sscanf(req.content, "%s %s %s", param, param2, param3);
+
+	char fullPath[BUFFER_SIZE];
+	memset(fullPath, '\0', BUFFER_SIZE);
+
+	sprintf(fullPath, "%s/%s", root, param);
+	int fd = open(fullPath, O_RDWR);
+	if (errno == ENOENT) {
+		fd = open(fullPath, O_CREAT | O_RDWR);
+	}
+
+	if (FALSE == fd) {
+		sendOneMsg(respfd, "File does not exist and can not create from server side\n");
+		return;
+	}
+
+	// lock file
+	struct flock file_lock;
+	memset(&file_lock,0,sizeof(file_lock));
+	file_lock.l_type = F_WRLCK;
+	fcntl(fd,F_SETLKW,&file_lock);	
+
+	// read file as a 2D char array
+	int lineSize = -1;
+	char** fileContent = readFile(fd, &lineSize);
+	
+	// reset the file
+	close(fd);
+	fd = open(fullPath, O_WRONLY | O_TRUNC);
+	ftruncate(fd, 0);
+
+	// there is not line in command
+	if (strcmp(param3, "XX") == 0) {
+		// fill file again
+		char2DToFile(fd, fileContent, lineSize);
+		// put new line parameter the end of file
+		if (lineSize > 0)
+			write(fd, "\n", 1);
+		write(fd, param2, strlen(param2));
+
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+
+		// respond about writeF finished
+		sendOneMsg(respfd, "writeF OK!...\n");
+		clearFileContent(fileContent, lineSize);
+		return;
+	} 
+
+	// if the line valid in command
+	int editLine = atoi(param2) - 1;
+	if (editLine >= 0 && editLine < lineSize) {
+		// fill file again
+		for (int i = 0; i < lineSize; ++i) {
+			if (i == editLine)
+				write(fd, param3, strlen(param3));
+			else
+				write(fd, fileContent[i], strlen(fileContent[i]));
+
+			// last line does not need new line
+			if (i < (lineSize - 1))
+				write(fd, "\n", 1);
+		}
+
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+
+		// respond about writeF finished
+		sendOneMsg(respfd, "writeF OK!...\n");
+		clearFileContent(fileContent, lineSize);
+		return;
+	}
+
+	// back up file
+	char2DToFile(fd, fileContent, lineSize);
+	
+	// unlock file
+	file_lock.l_type = F_UNLCK;
+	fcntl(fd,F_SETLKW,&file_lock);
+	
+	// respond about writeF finished
+	sendOneMsg(respfd, "Invalid line...\n");
+	clearFileContent(fileContent, lineSize);
 }
 
 // TODO: will change

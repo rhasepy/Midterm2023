@@ -69,22 +69,24 @@ struct message_t
 
 
 void respondEnd(int respfd);
-void respondUnknown(int respfd);
+void sendOneMsg(int respfd, const char* content);
 void sendStr(int respfd, const char* str);
 void respondList(int respfd, const char* root);
 void respondHelp(int respfd, struct message_t req);
-void respondReadF(int respfd, struct message_t req);
-void respondWriteF(int respfd, struct message_t req);
+void respondReadF(int respfd, struct message_t req, const char* root);
+void respondWriteF(int respfd, struct message_t req, const char* root);
 void respondUpload(int respfd, struct message_t req);
 void respondDowload(int respfd, struct message_t req);
 void listFilesAndDirectories(int respfd, const char* path, int level);
+void clearFileContent(char** data, int len);
+void char2DToFile(int fd, char** content, int size);
 
-char* time_as_string();
-char** read_file(int fd_, int* lines, const int lock);
+char* timeAsString();
+char** readFile(int fd_, int* lines);
 
 int getAndShiftInt(int* queue, int len);
 int findIndex(pid_t* queue, int target);
-int char_count(const char* string, char c, size_t size);
+int charCount(const char* string, char c, size_t size);
 
 pid_t getAndShiftPID(pid_t* queue, int len);
 

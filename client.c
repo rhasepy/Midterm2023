@@ -201,8 +201,17 @@ int main(int argc, char const *argv[])
 
         // prepare and send request to worker
         struct message_t command = prepareCommand(userInput);
-        write(workerFd, &command, sizeof(struct message_t));
-
+        if (command.type == DOWNLOAD) {
+            write(workerFd, &command, sizeof(struct message_t));
+            // TODO: download byte with chunk
+        } else if (command.type == UPLOAD) {
+            write(workerFd, &command, sizeof(struct message_t));
+            // TODO: server ready
+            // TODO: send byte with chunk
+        } else {
+            write(workerFd, &command, sizeof(struct message_t));
+        }
+        
         // retrieve responses from worker
         do {    
             read(clientFd, &response, sizeof(struct message_t));
