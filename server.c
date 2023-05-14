@@ -6,7 +6,8 @@ int serverFlag = TRUE;
 int clientCapacity = 0;
 char fifoName[HALF_BUFFER];
 char workingDirectory[SMALL_BUFFER];
-
+char fullLogPath[BUFFER_SIZE];
+int serverLogFd = -1;
 int isSigint = FALSE;
 
 // -- Worker Processes -- //
@@ -15,7 +16,6 @@ pid_t parentPid;
 
 // -- Shared Memory Part -- //
 int shmFd = -1;
-// TODO: ADDED int* for the client number pair number and pid
 pid_t* clientQueue = NULL;
 int* clientIdQueue = NULL;
 int* availableWorker = NULL;
@@ -72,6 +72,7 @@ void cleanupServer()
         sprintf(workerFifoName, "WORKER_%d", i);
         unlink(workerFifoName);
     }
+    fprintf(stdout, "bye\n");
 }
 
 void sigintHandler()
@@ -234,6 +235,21 @@ void initSignals()
     sigaction(SIGINT, &sigintAction, NULL);
 }
 
+void initLogFile()
+{
+    memset(fullLogPath, '\0', BUFFER_SIZE);
+
+    char* tempLogPath = initLogName("SERVER");
+    sprintf(fullLogPath, "%s/%s", LOG_PATH, tempLogPath);
+    serverLogFd = open(fullLogPath, O_CREAT | O_WRONLY, USR_READ_WRITE);
+    free(tempLogPath);
+
+    if (FALSE == serverLogFd) {
+        perror("open log file error");
+        exit(EXIT_SUCCESS);
+    }
+}
+
 int createServerFifo()
 {
     umask(0);
@@ -318,7 +334,15 @@ void serverActivity()
         sem_wait(mutexAvailableWorker);
         if (*availableWorker == 0) {
 
+            char temp[BUFFER_SIZE];
+            memset(temp, '\0', BUFFER_SIZE);
+            char* tempTime = timeAsString();
+            sprintf(temp, "[%s]Connection request PID %d... Que FULL\n", tempTime, clientPid);
+            free(tempTime);
+            write(serverLogFd, temp, strlen(temp));
+
             fprintf(stdout, "Connection request PID %d... Que FULL\n", clientPid);
+
 
             if (msg.type == TRY_CONNECT_REQ) {
 
@@ -376,7 +400,7 @@ void serverActivity()
     }
 }
 
-int sendResponse(int fd, int workerFd, struct message_t request)
+int sendResponse(int fd, int workerFd, struct message_t request, int clientId)
 {
     if (request.type == HELP) {
         respondHelp(fd, request);
@@ -394,6 +418,15 @@ int sendResponse(int fd, int workerFd, struct message_t request)
         respondEnd(fd);
         return FALSE;
     } else if (request.type == KILL) {
+        fprintf(stdout, "kill signal from client%d.. terminating...\n", clientId);
+
+        char temp[BUFFER_SIZE];
+        memset(temp, '\0', BUFFER_SIZE);
+        char* tempTime = timeAsString();
+        sprintf(temp, "[%s]kill signal from client%d.. terminating...\n", tempTime, clientId);
+        free(tempTime);
+        write(serverLogFd, temp, strlen(temp));
+
         killServer();
         return FALSE;
     } else {
@@ -405,8 +438,10 @@ int sendResponse(int fd, int workerFd, struct message_t request)
 
 int main(int argc, char const *argv[])
 {   
-    atexit(cleanupServer);
+    mkdir(LOG_PATH, 0777);
+    initLogFile();
 
+    atexit(cleanupServer);
     parentPid = getpid();
 
     initServerArgs(argc, argv);
@@ -452,6 +487,13 @@ int WorkerMain(int WorkerID)
             continue;
         } else {
             fprintf(stdout, "Client PID %d connected as \"client%d\"\n", clientPid, clientId);
+            
+            char temp[BUFFER_SIZE];
+            memset(temp, '\0', BUFFER_SIZE);
+            char* tempTime = timeAsString();
+            sprintf(temp, "[%s]Client PID %d connected as \"client%d\"\n", tempTime, clientPid, clientId);
+            free(tempTime);
+            write(serverLogFd, temp, strlen(temp));
         }
 
         // Sending worker fifo domain for client connect to worker about sending request
@@ -465,12 +507,19 @@ int WorkerMain(int WorkerID)
         do {
             // Receive client request
             read(workerFd, &request, sizeof(struct message_t));
-            fprintf(stdout, "%d - %s\n", request.type, request.content);
+            //fprintf(stdout, "%d - %s\n", request.type, request.content);
 
             // Do client request and send response
-        } while (FALSE != sendResponse(clientFd, workerFd, request));
+        } while (FALSE != sendResponse(clientFd, workerFd, request, clientId));
         fprintf(stdout, "client%d diconnected..\n", clientId);
 
+        char temp[BUFFER_SIZE];
+        memset(temp, '\0', BUFFER_SIZE);
+        char* tempTime = timeAsString();
+        sprintf(temp, "[%s]client%d diconnected..\n", tempTime, clientId);
+        free(tempTime);
+        write(serverLogFd, temp, strlen(temp));
+        
         // End of worker task
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) + 1;

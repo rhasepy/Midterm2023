@@ -21,6 +21,18 @@ char* timeAsString()
 	return as_string;
 }
 
+char* initLogName(const char* name)
+{
+	time_t t = time(NULL);
+  	struct tm tm = *localtime(&t);
+
+  	char* as_string = (char*)calloc(sizeof(char),200);
+
+  	sprintf(as_string,"%s_2022_%02d_%02d_%02d_%02d_%02d", name, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  	
+	return as_string;	
+}
+
 int charCount(const char* string, char c, size_t size)
 {	
 	int ctr = 0;

@@ -154,9 +154,19 @@ void runClientApp()
             }
         }
         write(workerFd, &command, sizeof(struct message_t));
-        
-        if (command.type == KILL)
+
+        // is command filter about exiting client
+        if (command.type == KILL) {
             exit(EXIT_SUCCESS);
+        } else if (command.type == QUIT) {
+            fprintf(stdout, "waiting for logfile ...\n");
+            read(clientFd, &response, sizeof(struct message_t));
+
+            fprintf(stdout, "logfile write request granted\n");
+            fprintf(stdout, "bye..\n");
+            workerFd = FALSE;
+            exit(EXIT_SUCCESS);
+        }
 
         do {
             memset(response.content, '\0', MSG_BUFFER_SIZE);
@@ -219,13 +229,6 @@ void runClientApp()
             }
             
         } while (response.type != COMMAND_END);
-
-        // if the  server send OK message and my request quit or kill
-        // then client exiting
-        if (command.type == QUIT) {
-            workerFd = FALSE;
-            exit(EXIT_SUCCESS);
-        }
     }
 }
 

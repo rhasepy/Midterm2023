@@ -17,6 +17,8 @@
 #include <stdio.h>
 #include <time.h>
 
+#define LOG_PATH            "LOGS"
+
 #define FULL_SEM            "FULL_SEM"
 #define EMPTY_SEM           "EMPTY_SEM"
 #define MUTEX_SEM           "MUTEX_SEM"
@@ -86,6 +88,7 @@ void clearFileContent(char** data, int len);
 void char2DToFile(int fd, char** content, int size);
 
 char* timeAsString();
+char* initLogName(const char* name);
 char** readFile(int fd_, int* lines);
 char* readFileAs1D(int fd, size_t* _size);
 
