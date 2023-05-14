@@ -217,11 +217,21 @@ void sendStr(int respfd, const char* str)
 	memset(msg.content, '\0', MSG_BUFFER_SIZE);
 	msg.type = STRING_MSG;
 
+	sprintf(msg.content, "%s", str);
+	write(respfd, &msg, sizeof(struct message_t));
+}
+
+void sendLine(int respfd, const char* str)
+{
+	struct message_t msg;
+	memset(msg.content, '\0', MSG_BUFFER_SIZE);
+	msg.type = STRING_MSG;
+
 	sprintf(msg.content, "%s\n", str);
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
-void listFilesAndDirectories(int respfd, const char* path, int level) 
+void listFilesAndDirectories(int respfd, const char* path, int level, int clientLogFd) 
 {
     DIR *dir;
     struct dirent *entry;
@@ -266,14 +276,14 @@ void listFilesAndDirectories(int respfd, const char* path, int level)
 
         // Recursively call for subdirectories (excluding . and ..)
         if (S_ISDIR(fileStat.st_mode) && strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
-            listFilesAndDirectories(respfd, filePath, level + 1);
+            listFilesAndDirectories(respfd, filePath, level + 1, clientLogFd);
     }
 
     // Close the directory
     closedir(dir);
 }
 
-void respondHelp(int respfd, struct message_t req)
+void respondHelp(int respfd, struct message_t req, int clientLogFd)
 {
 	char param[SMALL_BUFFER];
 	memset(param, '\0', SMALL_BUFFER);
@@ -282,13 +292,26 @@ void respondHelp(int respfd, struct message_t req)
 	struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);
 
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
+	
 	// if the client request help supported commands
 	if (strcmp(param, "XX") == 0) {
+		char* time = timeAsString();
+		sprintf(logLine, "[%s]help command, no parameters\n", time);
+		write(clientLogFd, logLine, strlen(logLine));
+		free(time);
+
 		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeT, upload, download, quit, killServer\n\n");
 		response.type = COMMAND_END;
 		write(respfd, &response, sizeof(struct message_t));
 		return;
 	}
+
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]help command, parameters <%s>\n", time, param);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
 
 	// if the client request help about command usage
 	if (strcmp(param, "help") == 0) {
@@ -333,19 +356,30 @@ void respondEnd(int respfd)
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
-void respondList(int respfd, const char* root)
+void respondList(int respfd, const char* root, int clientLogFd)
 {
-	listFilesAndDirectories(respfd, root, 0);
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
+
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]list command\n", time);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
+
+	listFilesAndDirectories(respfd, root, 0, clientLogFd);
 	respondEnd(respfd);
 }
 
-void respondReadF(int respfd, struct message_t req, const char* root)
+void respondReadF(int respfd, struct message_t req, const char* root, int clientLogFd)
 {
 	char param[HALF_BUFFER];
 	memset(param, '\0', HALF_BUFFER);
 	char param2[HALF_BUFFER];
 	memset(param2, '\0', HALF_BUFFER);
 	sscanf(req.content, "%s %s", param, param2);
+
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
 
 	char fileFullPath[BUFFER_SIZE];
 	memset(fileFullPath, '\0', BUFFER_SIZE);
@@ -369,6 +403,11 @@ void respondReadF(int respfd, struct message_t req, const char* root)
 	// if parameter does not exist then send whole file
 	if (strcmp(param2, "XX") == 0) {
 
+		char* time = timeAsString();
+		sprintf(logLine, "[%s]readF command, parameters <%s>\n", time, param);
+		write(clientLogFd, logLine, strlen(logLine));
+		free(time);
+
 		// whole file iterating
 		for (int i = 0; i < fileLine; ++i) {
 
@@ -378,7 +417,7 @@ void respondReadF(int respfd, struct message_t req, const char* root)
 				memset(buffer, '\0', MSG_BUFFER_SIZE);
 				strncpy(buffer, fileContent[i] + j, MSG_BUFFER_SIZE - 1);
 				buffer[MSG_BUFFER_SIZE - 1] = '\0';
-				sendStr(respfd, buffer);
+				sendLine(respfd, buffer);
 			}
 		}
 		// send end of response to client
@@ -391,6 +430,11 @@ void respondReadF(int respfd, struct message_t req, const char* root)
 		close(fd);
 		return;
 	}
+
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]readF command, parameters <%s> <%s>\n", time, param, param2);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
 
 	// if the line parameter exist then check line valid or not
 	int line = atoi(param2) - 1;
@@ -411,7 +455,7 @@ void respondReadF(int respfd, struct message_t req, const char* root)
 		memset(buffer, '\0', MSG_BUFFER_SIZE);
 		strncpy(buffer, fileContent[line] + j, MSG_BUFFER_SIZE - 1);
 		buffer[MSG_BUFFER_SIZE - 1] = '\0';
-		sendStr(respfd, buffer);
+		sendLine(respfd, buffer);
 	}
 	// send end of response to client
 	sendOneMsg(respfd, "");
@@ -423,7 +467,7 @@ void respondReadF(int respfd, struct message_t req, const char* root)
 	close(fd);
 }
 
-void respondWriteF(int respfd, struct message_t req, const char* root)
+void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd)
 {
 	char param[HALF_BUFFER];
 	memset(param, '\0', HALF_BUFFER);
@@ -433,6 +477,9 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 	memset(param3, '\0', HALF_BUFFER);
 
 	sscanf(req.content, "%s %s %s", param, param2, param3);
+
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
 
 	char fullPath[BUFFER_SIZE];
 	memset(fullPath, '\0', BUFFER_SIZE);
@@ -465,6 +512,11 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 
 	// there is not line in command
 	if (strcmp(param3, "XX") == 0) {
+		char* time = timeAsString();
+		sprintf(logLine, "[%s]writeF command, parameters <%s> <%s>\n", time, param, param2);
+		write(clientLogFd, logLine, strlen(logLine));
+		free(time);
+
 		// fill file again
 		char2DToFile(fd, fileContent, lineSize);
 		// put new line parameter the end of file
@@ -482,6 +534,11 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 		close(fd);
 		return;
 	} 
+
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]writeF command, parameters <%s> <%s> <%s>\n", time, param, param2, param3);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
 
 	// if the line valid in command
 	int editLine = atoi(param2) - 1;
@@ -522,11 +579,18 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 	clearFileContent(fileContent, lineSize);
 }
 
-void respondDowload(int respfd, int workerFd, struct message_t req, const char* root)
+void respondDowload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd)
 {
 	char fullPath[BUFFER_SIZE];
 	memset(fullPath, '\0', BUFFER_SIZE);
 	sprintf(fullPath, "%s/%s", root, req.content);
+
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]download command, parameters <%s>\n", time, req.content);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
 	
 	int fd = open(fullPath, O_RDONLY);
 	if (FALSE == fd) {
@@ -590,12 +654,19 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 	close(fd);
 }
 
-void respondUpload(int respfd, int workerFd, struct message_t req, const char* root)
+void respondUpload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd)
 {
 	// Get file name from request
 	char fullPath[BUFFER_SIZE];
 	memset(fullPath, '\0', BUFFER_SIZE);
 	sprintf(fullPath, "%s/%s", root, req.content);
+
+	char logLine[LNG_BUFFER_SIZE];
+	memset(logLine, '\0', LNG_BUFFER_SIZE);
+	char* time = timeAsString();
+	sprintf(logLine, "[%s]download command, parameters <%s>\n", time, req.content);
+	write(clientLogFd, logLine, strlen(logLine));
+	free(time);
 
 	// If the file exist in server then send error message to client
 	if (access(fullPath, F_OK) == TRUE) {

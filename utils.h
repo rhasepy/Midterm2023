@@ -33,6 +33,7 @@
 #define PROT_READ_WRITE     PROT_READ | PROT_WRITE
 #define USR_READ_WRITE      S_IRUSR | S_IWUSR
 
+#define LOG_BUFFER_SIZE     4 * 1024
 #define REQUEST_BUFFER_SIZE 25600
 #define LNG_BUFFER_SIZE     2048
 #define BUFFER_SIZE         1024
@@ -76,14 +77,15 @@ struct message_t
 
 void respondEnd(int respfd);
 void sendOneMsg(int respfd, const char* content);
+void sendLine(int respfd, const char* str);
 void sendStr(int respfd, const char* str);
-void respondList(int respfd, const char* root);
-void respondHelp(int respfd, struct message_t req);
-void respondReadF(int respfd, struct message_t req, const char* root);
-void respondWriteF(int respfd, struct message_t req, const char* root);
-void respondUpload(int respfd, int workerFd, struct message_t req, const char* root);
-void respondDowload(int respfd, int workerFd, struct message_t req, const char* root);
-void listFilesAndDirectories(int respfd, const char* path, int level);
+void respondList(int respfd, const char* root, int clientLogFd);
+void respondHelp(int respfd, struct message_t req, int clientLogFd);
+void respondReadF(int respfd, struct message_t req, const char* root, int clientLogFd);
+void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd);
+void respondUpload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
+void respondDowload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
+void listFilesAndDirectories(int respfd, const char* path, int level, int clientLogFd);
 void clearFileContent(char** data, int len);
 void char2DToFile(int fd, char** content, int size);
 

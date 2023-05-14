@@ -400,21 +400,31 @@ void serverActivity()
     }
 }
 
-int sendResponse(int fd, int workerFd, struct message_t request, int clientId)
+int sendResponse(int fd, int workerFd, struct message_t request, int clientId, int clientLogFd)
 {
     if (request.type == HELP) {
-        respondHelp(fd, request);
+        respondHelp(fd, request, clientLogFd);
     } else if (request.type == LIST) {
-        respondList(fd, workingDirectory);
+        respondList(fd, workingDirectory, clientLogFd);
     } else if (request.type == READF) {
-        respondReadF(fd, request, workingDirectory);
+        respondReadF(fd, request, workingDirectory, clientLogFd);
     }  else if (request.type == WRITEF)  {
-        respondWriteF(fd, request, workingDirectory);
+        respondWriteF(fd, request, workingDirectory, clientLogFd);
     } else if (request.type == UPLOAD) {
-        respondUpload(fd, workerFd, request, workingDirectory);
+        respondUpload(fd, workerFd, request, workingDirectory, clientLogFd);
     } else if (request.type ==  DOWNLOAD) {
-        respondDowload(fd, workerFd, request, workingDirectory);
+        respondDowload(fd, workerFd, request, workingDirectory, clientLogFd);
     } else if (request.type == QUIT) {
+
+        char temp[BUFFER_SIZE];
+        memset(temp, '\0', BUFFER_SIZE);
+        char* tempTime = timeAsString();
+        sprintf(temp, "[%s]quit client%d..\n", tempTime, clientId);
+        free(tempTime);
+        write(serverLogFd, temp, strlen(temp));
+        write(clientLogFd, temp, strlen(temp));
+        close(clientLogFd);
+
         respondEnd(fd);
         return FALSE;
     } else if (request.type == KILL) {
@@ -426,6 +436,8 @@ int sendResponse(int fd, int workerFd, struct message_t request, int clientId)
         sprintf(temp, "[%s]kill signal from client%d.. terminating...\n", tempTime, clientId);
         free(tempTime);
         write(serverLogFd, temp, strlen(temp));
+        write(clientLogFd, temp, strlen(temp));
+        close(clientLogFd);
 
         killServer();
         return FALSE;
@@ -471,6 +483,21 @@ int WorkerMain(int WorkerID)
         pid_t clientPid = getAndShiftPID(clientQueue, clientCapacity);
         int clientId = getAndShiftInt(clientIdQueue, clientCapacity);
 
+        char logName[HALF_BUFFER];
+        memset(logName, '\0', HALF_BUFFER);
+        sprintf(logName, "Client%d", clientId);
+        char* fullLogName = initLogName(logName);
+
+        char fullClientLogPath[BUFFER_SIZE];
+        memset(fullClientLogPath, '\0', BUFFER_SIZE);
+        sprintf(fullClientLogPath, "%s/%s", LOG_PATH, fullLogName);
+
+        int clientLogFd = open(fullClientLogPath, O_CREAT | O_RDWR, USR_READ_WRITE);
+        if (FALSE == clientLogFd) {
+            perror("client log open error");
+        }
+        free(fullLogName);
+
         // Server knows information about "how much available worker?" thanks to this shared memory
         sem_wait(mutexAvailableWorker);
         *availableWorker = (*availableWorker) - 1;
@@ -510,7 +537,7 @@ int WorkerMain(int WorkerID)
             //fprintf(stdout, "%d - %s\n", request.type, request.content);
 
             // Do client request and send response
-        } while (FALSE != sendResponse(clientFd, workerFd, request, clientId));
+        } while (FALSE != sendResponse(clientFd, workerFd, request, clientId, clientLogFd));
         fprintf(stdout, "client%d diconnected..\n", clientId);
 
         char temp[BUFFER_SIZE];
