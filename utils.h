@@ -50,10 +50,13 @@ enum messageType
     WRITEF,
     UPLOAD,
     UNKNOWN,
+    FILENAME,
     DOWNLOAD,
     STRING_MSG,
     CONNECT_REQ,
     COMMAND_END,
+    DOWNLOAD_OK,
+    FILE_CONTENT,
     WORKER_ENDPOINT,
     TRY_CONNECT_REQ,
     CONNECTION_ACCEPTED,
@@ -75,19 +78,23 @@ void respondList(int respfd, const char* root);
 void respondHelp(int respfd, struct message_t req);
 void respondReadF(int respfd, struct message_t req, const char* root);
 void respondWriteF(int respfd, struct message_t req, const char* root);
-void respondUpload(int respfd, struct message_t req);
-void respondDowload(int respfd, struct message_t req);
+void respondUpload(int respfd, int workerFd, struct message_t req, const char* root);
+void respondDowload(int respfd, int workerFd, struct message_t req, const char* root);
 void listFilesAndDirectories(int respfd, const char* path, int level);
 void clearFileContent(char** data, int len);
 void char2DToFile(int fd, char** content, int size);
 
 char* timeAsString();
 char** readFile(int fd_, int* lines);
+char* readFileAs1D(int fd, size_t* _size);
 
 int getAndShiftInt(int* queue, int len);
 int findIndex(pid_t* queue, int target);
 int charCount(const char* string, char c, size_t size);
 
 pid_t getAndShiftPID(pid_t* queue, int len);
+
+struct message_t prepareConnectionRequest(const char* connectionCommand);
+struct message_t prepareCommand(const char* input);
 
 #endif

@@ -1,6 +1,8 @@
 #include "utils.h"
 
+int serverFd = -1;
 int workerFd = -1;
+int clientFd = -1;
 char clientFifo[HALF_BUFFER];
 
 void cleanupClient()
@@ -48,82 +50,7 @@ void createFifo()
     }
 }
 
-struct message_t prepareConnectionRequest(const char* connectionCommand)
-{
-    struct message_t connReq;
-    memset(connReq.content, '\0', MSG_BUFFER_SIZE);
-    sprintf(connReq.content, "%d", getpid());
-
-    if (strcmp(connectionCommand, "Connect") == 0) {
-        connReq.type = CONNECT_REQ;
-    } else if (strcmp(connectionCommand, "tryConnect") == 0) {
-        connReq.type = TRY_CONNECT_REQ;
-    } else {
-        fprintf(stderr, "[ERROR] Usage: biboClient <Connect/tryConnect> ServerPID\n");
-        exit(EXIT_FAILURE);
-    }
-    return connReq;
-}
-
-struct message_t prepareCommand(const char* input)
-{
-    struct message_t commandRequest;
-    commandRequest.type = UNKNOWN;
-    memset(commandRequest.content, '\0', MSG_BUFFER_SIZE);
-
-    if (input == NULL || strlen(input) == 0) {
-        return commandRequest;
-    }
-
-    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeT <file> <line #> <string>)
-    // because worst case string is empty if the string is empty
-    // parsed 4 token is 'XX' then command is unknown and empty command
-    // worker does not respond  
-    char tokenizerStr[BUFFER_SIZE];
-    memset(tokenizerStr, '\0', BUFFER_SIZE);
-    sprintf(tokenizerStr, "%s XX XX XX XX", input);
-
-    char command[SMALL_BUFFER];
-    memset(command, '\0', SMALL_BUFFER);
-
-    char param1[SMALL_BUFFER];
-    memset(param1, '\0', SMALL_BUFFER);
-
-    char param2[SMALL_BUFFER];
-    memset(param2, '\0', SMALL_BUFFER);
-
-    char param3[SMALL_BUFFER];
-    memset(param3, '\0', SMALL_BUFFER);
-
-    sscanf(tokenizerStr, "%s %s %s %s", command, param1, param2, param3);
-
-    if (strcmp(command, "help") == 0) {
-        commandRequest.type = HELP;
-        sprintf(commandRequest.content, "%s", param1);
-    } else if (strcmp(command, "list") == 0) {
-        commandRequest.type = LIST;
-    } else if (strcmp(command, "readF") == 0) {
-        commandRequest.type = READF;
-        sprintf(commandRequest.content, "%s %s", param1, param2);
-    } else if (strcmp(command, "writeF") == 0) {
-        commandRequest.type = WRITEF;
-        sprintf(commandRequest.content, "%s %s %s", param1, param2, param3);
-    } else if (strcmp(command, "upload") == 0) {
-        commandRequest.type = UPLOAD;
-        sprintf(commandRequest.content, "%s", param1);
-    } else if (strcmp(command, "download") == 0) {
-        commandRequest.type = DOWNLOAD;
-        sprintf(commandRequest.content, "%s", param1);
-    } else if (strcmp(command, "quit") == 0) {
-        commandRequest.type = QUIT;
-    } else if (strcmp(command, "killServer") == 0) {
-        commandRequest.type = KILL;
-    }
-
-    return commandRequest;
-}
-
-int main(int argc, char const *argv[])
+void initClientApp(int argc, char const *argv[])
 {
     if (argc < 3) {
         fprintf(stderr, "[ERROR] Usage: biboClient <Connect/tryConnect> ServerPID\n");
@@ -136,7 +63,10 @@ int main(int argc, char const *argv[])
 
     // create fifo file
     createFifo();
+}
 
+void connectToServer(char const *argv[])
+{
     // preparing connect request
     struct message_t connReq = prepareConnectionRequest(argv[1]);
 
@@ -145,16 +75,19 @@ int main(int argc, char const *argv[])
     sprintf(serverFifo, "SERVER_%d", atoi(argv[2]));
 
     // send connect request to server
-    int serverFd = open(serverFifo, O_WRONLY);
+    serverFd = open(serverFifo, O_WRONLY);
     if (FALSE == serverFd) {
         perror("open server fifo");
         exit(EXIT_FAILURE);
     }
     write(serverFd, &connReq, sizeof(struct message_t));
     close(serverFd);
+}
 
+void initClientFifo()
+{
     // initiliaze client fifo
-    int clientFd = open(clientFifo, O_RDONLY);
+    clientFd = open(clientFifo, O_RDONLY);
     if (FALSE == clientFd) {
         perror("open client fifo");
         exit(EXIT_FAILURE);
@@ -166,7 +99,10 @@ int main(int argc, char const *argv[])
         perror("open dummy client fifo");
         exit(EXIT_FAILURE);
     }
+}
 
+void getConnection()
+{
     // receive response from server about connection status (accepted or declined)
     struct message_t response;
     fprintf(stdout, "Waiting for Que..\n");
@@ -189,10 +125,15 @@ int main(int argc, char const *argv[])
         perror("client do not know worker end point");
         exit(EXIT_FAILURE);
     }
+}
+
+void runClientApp()
+{
+    struct message_t response;
+    memset(response.content, '\0', MSG_BUFFER_SIZE);
 
     // send request to worker and receive response
     for (;;) {
-
         // take command from terminal
         char userInput[HALF_BUFFER];
         memset(userInput, '\0', HALF_BUFFER);
@@ -201,21 +142,38 @@ int main(int argc, char const *argv[])
 
         // prepare and send request to worker
         struct message_t command = prepareCommand(userInput);
-        if (command.type == DOWNLOAD) {
-            write(workerFd, &command, sizeof(struct message_t));
-            // TODO: download byte with chunk
-        } else if (command.type == UPLOAD) {
-            write(workerFd, &command, sizeof(struct message_t));
-            // TODO: server ready
-            // TODO: send byte with chunk
-        } else {
-            write(workerFd, &command, sizeof(struct message_t));
-        }
+        write(workerFd, &command, sizeof(struct message_t));
         
         // retrieve responses from worker
-        do {    
+        int downloadedFd = -1;
+        //int uploadedFd = -1;
+        do {
+            memset(response.content, '\0', MSG_BUFFER_SIZE);
             read(clientFd, &response, sizeof(struct message_t));
-            fprintf(stdout, "%s", response.content);
+
+            if (response.type == FILENAME) {
+
+                // create file
+                downloadedFd = open(response.content, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                // if the can not create file
+                if (FALSE == downloadedFd) {
+                    command.type = UNKNOWN;
+                    sprintf(command.content, "Error create file client %s\n", strerror(errno));
+                    write(workerFd, &command, sizeof(struct message_t));
+                }
+
+                // if the create file success then this information sending server
+                command.type = DOWNLOAD_OK;
+                sprintf(command.content, "Send me\n");
+                write(workerFd, &command, sizeof(struct message_t));
+
+            } else if (response.type == FILE_CONTENT) {
+                write(downloadedFd, response.content, MSG_BUFFER_SIZE);
+            } else {
+                fprintf(stdout, "%s", response.content);
+            }
+            
         } while (response.type != COMMAND_END);
 
         // if the  server send OK message and my request quit or kill
@@ -229,5 +187,17 @@ int main(int argc, char const *argv[])
             exit(EXIT_SUCCESS);
         }
     }
+}
+
+int main(int argc, char const *argv[])
+{
+    initClientApp(argc, argv);
+
+    connectToServer(argv);
+    initClientFifo();
+
+    getConnection();
+
+    runClientApp();
     return 0;
 }

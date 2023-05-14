@@ -31,6 +31,19 @@ int charCount(const char* string, char c, size_t size)
 	return ctr;
 }
 
+char* readFileAs1D(int fd, size_t* _size)
+{
+	size_t size = lseek(fd,0,SEEK_END);
+
+	*_size = size;
+
+	lseek(fd,0,SEEK_SET);
+	char* readed_file = (char*)calloc(size, sizeof(char));
+	read(fd, readed_file, size);
+
+	return readed_file;
+}
+
 char** readFile(int fd_, int* lines)	
 {	
 	int fd = fd_;
@@ -109,6 +122,81 @@ int findIndex(pid_t* queue, int target)
         }
     }
     return 0;
+}
+
+struct message_t prepareConnectionRequest(const char* connectionCommand)
+{
+    struct message_t connReq;
+    memset(connReq.content, '\0', MSG_BUFFER_SIZE);
+    sprintf(connReq.content, "%d", getpid());
+
+    if (strcmp(connectionCommand, "Connect") == 0) {
+        connReq.type = CONNECT_REQ;
+    } else if (strcmp(connectionCommand, "tryConnect") == 0) {
+        connReq.type = TRY_CONNECT_REQ;
+    } else {
+        fprintf(stderr, "[ERROR] Usage: biboClient <Connect/tryConnect> ServerPID\n");
+        exit(EXIT_FAILURE);
+    }
+    return connReq;
+}
+
+struct message_t prepareCommand(const char* input)
+{
+    struct message_t commandRequest;
+    commandRequest.type = UNKNOWN;
+    memset(commandRequest.content, '\0', MSG_BUFFER_SIZE);
+
+    if (input == NULL || strlen(input) == 0) {
+        return commandRequest;
+    }
+
+    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeT <file> <line #> <string>)
+    // because worst case string is empty if the string is empty
+    // parsed 4 token is 'XX' then command is unknown and empty command
+    // worker does not respond  
+    char tokenizerStr[BUFFER_SIZE];
+    memset(tokenizerStr, '\0', BUFFER_SIZE);
+    sprintf(tokenizerStr, "%s XX XX XX XX", input);
+
+    char command[SMALL_BUFFER];
+    memset(command, '\0', SMALL_BUFFER);
+
+    char param1[SMALL_BUFFER];
+    memset(param1, '\0', SMALL_BUFFER);
+
+    char param2[SMALL_BUFFER];
+    memset(param2, '\0', SMALL_BUFFER);
+
+    char param3[SMALL_BUFFER];
+    memset(param3, '\0', SMALL_BUFFER);
+
+    sscanf(tokenizerStr, "%s %s %s %s", command, param1, param2, param3);
+
+    if (strcmp(command, "help") == 0) {
+        commandRequest.type = HELP;
+        sprintf(commandRequest.content, "%s", param1);
+    } else if (strcmp(command, "list") == 0) {
+        commandRequest.type = LIST;
+    } else if (strcmp(command, "readF") == 0) {
+        commandRequest.type = READF;
+        sprintf(commandRequest.content, "%s %s", param1, param2);
+    } else if (strcmp(command, "writeF") == 0) {
+        commandRequest.type = WRITEF;
+        sprintf(commandRequest.content, "%s %s %s", param1, param2, param3);
+    } else if (strcmp(command, "upload") == 0) {
+        commandRequest.type = UPLOAD;
+        sprintf(commandRequest.content, "%s", param1);
+    } else if (strcmp(command, "download") == 0) {
+        commandRequest.type = DOWNLOAD;
+        sprintf(commandRequest.content, "%s", param1);
+    } else if (strcmp(command, "quit") == 0) {
+        commandRequest.type = QUIT;
+    } else if (strcmp(command, "killServer") == 0) {
+        commandRequest.type = KILL;
+    }
+
+    return commandRequest;
 }
 
 void sendStr(int respfd, const char* str)
@@ -379,6 +467,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 		// respond about writeF finished
 		sendOneMsg(respfd, "writeF OK!...\n");
 		clearFileContent(fileContent, lineSize);
+		close(fd);
 		return;
 	} 
 
@@ -400,6 +489,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 		// unlock file
 		file_lock.l_type = F_UNLCK;
 		fcntl(fd,F_SETLKW,&file_lock);
+		close(fd);
 
 		// respond about writeF finished
 		sendOneMsg(respfd, "writeF OK!...\n");
@@ -413,24 +503,76 @@ void respondWriteF(int respfd, struct message_t req, const char* root)
 	// unlock file
 	file_lock.l_type = F_UNLCK;
 	fcntl(fd,F_SETLKW,&file_lock);
+	close(fd);
 	
 	// respond about writeF finished
 	sendOneMsg(respfd, "Invalid line...\n");
 	clearFileContent(fileContent, lineSize);
 }
 
-// TODO: will change
-void respondUpload(int respfd, struct message_t req)
+// TODO: special file will be handle
+void respondDowload(int respfd, int workerFd, struct message_t req, const char* root)
 {
-    struct message_t response;
-    memset(response.content, '\0', MSG_BUFFER_SIZE);
-    response.type = COMMAND_END;
-    sprintf(response.content, "DUMMY RESPONSE\n");
-    write(respfd, &response, sizeof(struct message_t));
+	char fullPath[BUFFER_SIZE];
+	memset(fullPath, '\0', BUFFER_SIZE);
+	sprintf(fullPath, "%s/%s", root, req.content);
+	
+	int fd = open(fullPath, O_RDONLY);
+	if (FALSE == fd) {
+		sendOneMsg(respfd, "Invalid file...\n");
+		return;
+	}
+
+	// lock file
+	struct flock file_lock;
+	memset(&file_lock,0,sizeof(file_lock));
+	file_lock.l_type = F_WRLCK;
+	fcntl(fd,F_SETLKW,&file_lock);
+	
+	// read file
+	size_t fileSize;
+	char* content = readFileAs1D(fd, &fileSize);
+
+	// send file name to client
+	struct message_t downloadResponse;
+    memset(downloadResponse.content, '\0', MSG_BUFFER_SIZE);
+    downloadResponse.type = FILENAME;
+    sprintf(downloadResponse.content, "%s", req.content);
+    write(respfd, &downloadResponse, sizeof(struct message_t));
+
+	read(workerFd, &downloadResponse, sizeof(struct message_t));
+	if (downloadResponse.type != DOWNLOAD_OK) {
+		sendOneMsg(respfd, "Download FAIL!\n");
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+		close(fd);
+		free(content);
+	}
+
+	// whole line sending with 1024 byte chunks.
+	for (int i = 0; i < fileSize; i += MSG_BUFFER_SIZE) {
+		// chunk data
+		char buffer[MSG_BUFFER_SIZE];
+		memset(buffer, '\0', MSG_BUFFER_SIZE);
+		strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
+		buffer[MSG_BUFFER_SIZE - 1] = '\0';
+
+		// send chunk data
+		downloadResponse.type = FILE_CONTENT;
+		sprintf(downloadResponse.content, "%s", buffer);
+		write(respfd, &downloadResponse, sizeof(struct message_t));
+	}
+	sendOneMsg(respfd, "Download OK!\n");
+	free(content);
+
+	// unlock file
+	file_lock.l_type = F_UNLCK;
+	fcntl(fd,F_SETLKW,&file_lock);
+	close(fd);
 }
 
-// TODO: will change
-void respondDowload(int respfd, struct message_t req)
+void respondUpload(int respfd, int workerFd, struct message_t req, const char* root)
 {
     struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);

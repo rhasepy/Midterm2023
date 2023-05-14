@@ -9,6 +9,7 @@ char workingDirectory[SMALL_BUFFER];
 
 // -- Worker Processes -- //
 pid_t* workerPool = NULL;
+pid_t parentPid;
 
 // -- Shared Memory Part -- //
 int shmFd = -1;
@@ -368,7 +369,7 @@ void serverActivity()
     }
 }
 
-int sendResponse(int fd, struct message_t request)
+int sendResponse(int fd, int workerFd, struct message_t request)
 {
     if (request.type == HELP) {
         respondHelp(fd, request);
@@ -379,9 +380,9 @@ int sendResponse(int fd, struct message_t request)
     }  else if (request.type == WRITEF)  {
         respondWriteF(fd, request, workingDirectory);
     } else if (request.type == UPLOAD) {
-        respondUpload(fd, request);
+        respondUpload(fd, workerFd, request, workingDirectory);
     } else if (request.type ==  DOWNLOAD) {
-        respondDowload(fd, request);
+        respondDowload(fd, workerFd, request, workingDirectory);
     } else if (request.type == QUIT) {
         respondEnd(fd);
         return FALSE;
@@ -399,6 +400,8 @@ int sendResponse(int fd, struct message_t request)
 int main(int argc, char const *argv[])
 {   
     atexit(cleanupServer);
+
+    parentPid = getpid();
 
     initServerArgs(argc, argv);
     initSignals();
@@ -459,7 +462,7 @@ int WorkerMain(int WorkerID)
             fprintf(stdout, "%d - %s\n", request.type, request.content);
 
             // Do client request and send response
-        } while (FALSE != sendResponse(clientFd, request));
+        } while (FALSE != sendResponse(clientFd, workerFd, request));
         fprintf(stdout, "client%d diconnected..\n", clientId);
 
         // End of worker task
