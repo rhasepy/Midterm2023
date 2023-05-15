@@ -667,6 +667,12 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 		return;
 	}
 
+	// lock file
+	struct flock file_lock;
+	memset(&file_lock,0,sizeof(file_lock));
+	file_lock.l_type = F_WRLCK;
+	fcntl(fd,F_SETLKW,&file_lock);	
+
 	// Send confirmation message to start uploading file
 	struct message_t response;
     memset(response.content, '\0', MSG_BUFFER_SIZE);
@@ -678,15 +684,16 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 	struct message_t clientMsg;
 	memset(clientMsg.content, '\0', MSG_BUFFER_SIZE);
 	do {
-
 		read(workerFd, &clientMsg, sizeof(struct message_t));
 		if (clientMsg.type == FILE_CONTENT) {
 			unsigned char c = (unsigned char) clientMsg.content[0];
 			write(fd, &c, 1);
 		}
-			
-
 	} while (clientMsg.type != COMMAND_END);
+
+	// unlock file
+	file_lock.l_type = F_UNLCK;
+	fcntl(fd,F_SETLKW,&file_lock);
 
 	sendOneMsg(respfd, "Upload OK!\n");
 }
