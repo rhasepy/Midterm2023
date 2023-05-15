@@ -20,15 +20,15 @@ int shmFd = -1;
 // using for producer consumer to worker retrieving client pid and id 
 pid_t* clientQueue = NULL;
 int* clientIdQueue = NULL;
-sem_t* fullSem;
-sem_t* emptySem;
-sem_t* mutexSem;
+sem_t* fullSem = NULL;
+sem_t* emptySem = NULL;
+sem_t* mutexSem = NULL;
 
 // available worker is integer worker access this memory
 // semaphore using for mutual exclusion
 // -- Shared Memory Part -- //
 int* availableWorker = NULL;
-sem_t* mutexAvailableWorker;
+sem_t* mutexAvailableWorker = NULL;
 
 // -- Worker Part -- //
 int WorkerMain(int WorkerID);
