@@ -190,8 +190,9 @@ void runClientApp()
                 write(workerFd, &command, sizeof(struct message_t));
 
             } else if (response.type == FILE_CONTENT) {
-                unsigned char c = response.content[0];
+                unsigned char c = (unsigned char) response.content[0];
                 write(downloadedFd, &c, 1);
+                
             } else if (response.type == UPLOAD_OK) {
 
                 lseek(uploadedFd, 0, SEEK_SET);

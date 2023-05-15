@@ -680,8 +680,11 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 	do {
 
 		read(workerFd, &clientMsg, sizeof(struct message_t));
-		if (clientMsg.type == FILE_CONTENT)
-			write(fd, clientMsg.content, strlen(clientMsg.content));
+		if (clientMsg.type == FILE_CONTENT) {
+			unsigned char c = (unsigned char) clientMsg.content[0];
+			write(fd, &c, 1);
+		}
+			
 
 	} while (clientMsg.type != COMMAND_END);
 
