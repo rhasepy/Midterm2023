@@ -5,6 +5,7 @@ int workerFd = -1;
 int clientFd = -1;
 char clientFifo[HALF_BUFFER];
 
+// clean client 
 void cleanupClient()
 {
     if (FALSE !=  workerFd) {
@@ -17,11 +18,13 @@ void cleanupClient()
     unlink(clientFifo);
 }
 
+// sigint handler for client
 void sigintHandler()
 {
     exit(1);
 }
 
+// init signal handler
 void initSignals()
 {
     struct sigaction sigintAction;
@@ -30,6 +33,7 @@ void initSignals()
     sigaction(SIGINT, &sigintAction, NULL);
 }
 
+// create client fifo
 void createFifo()
 {
     umask(0);
@@ -50,6 +54,7 @@ void createFifo()
     }
 }
 
+// initiliaze client arguments from user
 void initClientApp(int argc, char const *argv[])
 {
     if (argc < 3) {
@@ -65,6 +70,7 @@ void initClientApp(int argc, char const *argv[])
     createFifo();
 }
 
+// send connection to server
 void connectToServer(char const *argv[])
 {
     // preparing connect request
@@ -84,6 +90,7 @@ void connectToServer(char const *argv[])
     close(serverFd);
 }
 
+// initiliaze client fifo open dummy writer side to prevent sending EOF to fifo from kernel
 void initClientFifo()
 {
     // initiliaze client fifo
@@ -101,6 +108,7 @@ void initClientFifo()
     }
 }
 
+// get server connection
 void getConnection()
 {
     // receive response from server about connection status (accepted or declined)
@@ -127,6 +135,7 @@ void getConnection()
     }
 }
 
+// client app activity
 void runClientApp()
 {
     struct message_t response;
@@ -172,6 +181,7 @@ void runClientApp()
             memset(response.content, '\0', MSG_BUFFER_SIZE);
             read(clientFd, &response, sizeof(struct message_t));
 
+            // if the command type is file name then download file is available. create file
             if (response.type == FILENAME) {
 
                 // create file
@@ -189,10 +199,12 @@ void runClientApp()
                 sprintf(command.content, "Send me\n");
                 write(workerFd, &command, sizeof(struct message_t));
 
+            // if the command type is file content then write byte to downloading file 
             } else if (response.type == FILE_CONTENT) {
                 unsigned char c = (unsigned char) response.content[0];
                 write(downloadedFd, &c, 1);
-                
+
+            // if the command type is upload ok then server allow uploading operation do it
             } else if (response.type == UPLOAD_OK) {
 
                 lseek(uploadedFd, 0, SEEK_SET);
@@ -213,10 +225,11 @@ void runClientApp()
                 read(clientFd, &response, sizeof(struct message_t));
                 fprintf(stdout, "%s", response.content);
 
+            // else is error or information message write to stdout
             } else {
                 fprintf(stdout, "%s", response.content);
             }
-            
+            // if the retrieve command end then command finished, break loop and read input from user
         } while (response.type != COMMAND_END);
     }
 }

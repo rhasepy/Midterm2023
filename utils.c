@@ -1,5 +1,6 @@
 #include "utils.h"
 
+// char 2d to write file
 void char2DToFile(int fd, char** content, int size)
 {
 	for (int i = 0; i < size; ++i) {
@@ -9,6 +10,7 @@ void char2DToFile(int fd, char** content, int size)
 	}	
 }
 
+// return time information
 char* timeAsString()
 {
 	time_t t = time(NULL);
@@ -21,6 +23,7 @@ char* timeAsString()
 	return as_string;
 }
 
+// initiliaze logger name
 char* initLogName(const char* name)
 {
 	time_t t = time(NULL);
@@ -33,6 +36,7 @@ char* initLogName(const char* name)
 	return as_string;	
 }
 
+// how much occurences c in string
 int charCount(const char* string, char c, size_t size)
 {	
 	int ctr = 0;
@@ -43,6 +47,7 @@ int charCount(const char* string, char c, size_t size)
 	return ctr;
 }
 
+// read file and return its content
 char* readFileAs1D(int fd, size_t* _size)
 {
 	size_t size = lseek(fd,0,SEEK_END);
@@ -56,6 +61,7 @@ char* readFileAs1D(int fd, size_t* _size)
 	return readed_file;
 }
 
+// read file and return its content line by line
 char** readFile(int fd_, int* lines)	
 {	
 	int fd = fd_;
@@ -93,6 +99,7 @@ char** readFile(int fd_, int* lines)
 	return parsed_file;	
 }
 
+// release all file resources
 void clearFileContent(char** data, int len)
 {
 	for (int i = 0; i < len; ++i)
@@ -100,6 +107,7 @@ void clearFileContent(char** data, int len)
 	free(data);
 }
 
+// get element and shift queue (dequeue)
 pid_t getAndShiftPID(pid_t* queue, int len)
 {
     pid_t returnVal = queue[0];
@@ -113,6 +121,7 @@ pid_t getAndShiftPID(pid_t* queue, int len)
     return returnVal;
 }
 
+// get element and shift queue (dequeue)
 int getAndShiftInt(int* queue, int len)
 {
     int returnVal = queue[0];
@@ -126,6 +135,7 @@ int getAndShiftInt(int* queue, int len)
     return returnVal;	
 }
 
+// search target first occurence index
 int findIndex(pid_t* queue, int target)
 {
     for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i) {
@@ -136,6 +146,7 @@ int findIndex(pid_t* queue, int target)
     return 0;
 }
 
+// prepare connection request
 struct message_t prepareConnectionRequest(const char* connectionCommand)
 {
     struct message_t connReq;
@@ -153,6 +164,7 @@ struct message_t prepareConnectionRequest(const char* connectionCommand)
     return connReq;
 }
 
+// prepare command from user
 struct message_t prepareCommand(const char* input)
 {
     struct message_t commandRequest;
@@ -211,6 +223,7 @@ struct message_t prepareCommand(const char* input)
     return commandRequest;
 }
 
+// send string to client no multiple string
 void sendStr(int respfd, const char* str)
 {
 	struct message_t msg;
@@ -221,6 +234,7 @@ void sendStr(int respfd, const char* str)
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
+// send one line to client no multiple line
 void sendLine(int respfd, const char* str)
 {
 	struct message_t msg;
@@ -231,6 +245,7 @@ void sendLine(int respfd, const char* str)
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
+// search all directory and sub directory recursively
 void listFilesAndDirectories(int respfd, const char* path, int level, int clientLogFd) 
 {
     DIR *dir;
@@ -283,6 +298,7 @@ void listFilesAndDirectories(int respfd, const char* path, int level, int client
     closedir(dir);
 }
 
+// help response to client
 void respondHelp(int respfd, struct message_t req, int clientLogFd)
 {
 	char param[SMALL_BUFFER];
@@ -338,6 +354,7 @@ void respondHelp(int respfd, struct message_t req, int clientLogFd)
 	write(respfd, &response, sizeof(struct message_t));
 }
 
+// send one message to client no multiple message
 void sendOneMsg(int respfd, const char* content)
 {
 	struct message_t msg;
@@ -348,6 +365,7 @@ void sendOneMsg(int respfd, const char* content)
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
+// send end command to client to client finished waiting mesage
 void respondEnd(int respfd)
 {
 	struct message_t msg;
@@ -356,20 +374,26 @@ void respondEnd(int respfd)
 	write(respfd, &msg, sizeof(struct message_t));
 }
 
+// send list content to client
 void respondList(int respfd, const char* root, int clientLogFd)
 {
 	char logLine[LNG_BUFFER_SIZE];
 	memset(logLine, '\0', LNG_BUFFER_SIZE);
 
+	// print log
 	char* time = timeAsString();
 	sprintf(logLine, "[%s]list command\n", time);
 	write(clientLogFd, logLine, strlen(logLine));
 	free(time);
 
+	// all directory and files search and send client
 	listFilesAndDirectories(respfd, root, 0, clientLogFd);
+
+	// end of command
 	respondEnd(respfd);
 }
 
+// read file content
 void respondReadF(int respfd, struct message_t req, const char* root, int clientLogFd)
 {
 	char param[HALF_BUFFER];
@@ -431,6 +455,7 @@ void respondReadF(int respfd, struct message_t req, const char* root, int client
 		return;
 	}
 
+	// print log
 	char* time = timeAsString();
 	sprintf(logLine, "[%s]readF command, parameters <%s> <%s>\n", time, param, param2);
 	write(clientLogFd, logLine, strlen(logLine));
@@ -467,6 +492,7 @@ void respondReadF(int respfd, struct message_t req, const char* root, int client
 	close(fd);
 }
 
+// write file content
 void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd)
 {
 	char param[HALF_BUFFER];
@@ -478,9 +504,11 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 
 	sscanf(req.content, "%s %s %s", param, param2, param3);
 
+	// log file line
 	char logLine[LNG_BUFFER_SIZE];
 	memset(logLine, '\0', LNG_BUFFER_SIZE);
 
+	// full path of file
 	char fullPath[BUFFER_SIZE];
 	memset(fullPath, '\0', BUFFER_SIZE);
 
@@ -535,6 +563,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 		return;
 	} 
 
+	// print log
 	char* time = timeAsString();
 	sprintf(logLine, "[%s]writeF command, parameters <%s> <%s> <%s>\n", time, param, param2, param3);
 	write(clientLogFd, logLine, strlen(logLine));
@@ -579,12 +608,15 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 	clearFileContent(fileContent, lineSize);
 }
 
+// send file content to client
 void respondDowload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd)
 {
+	// full path of file
 	char fullPath[BUFFER_SIZE];
 	memset(fullPath, '\0', BUFFER_SIZE);
 	sprintf(fullPath, "%s/%s", root, req.content);
 
+	// print log
 	char logLine[LNG_BUFFER_SIZE];
 	memset(logLine, '\0', LNG_BUFFER_SIZE);
 	char* time = timeAsString();
@@ -592,6 +624,7 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 	write(clientLogFd, logLine, strlen(logLine));
 	free(time);
 	
+	// open file to be send client
 	int fd = open(fullPath, O_RDONLY, 0777);
 	if (FALSE == fd) {
 		sendOneMsg(respfd, "Invalid file...\n");
@@ -611,6 +644,7 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
     sprintf(downloadResponse.content, "%s", req.content);
     write(respfd, &downloadResponse, sizeof(struct message_t));
 
+	// if the client create file that will download
 	read(workerFd, &downloadResponse, sizeof(struct message_t));
 	if (downloadResponse.type != DOWNLOAD_OK) {
 		sendOneMsg(respfd, "Download FAIL!\n");
@@ -620,9 +654,12 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 		close(fd);
 	}
 
+	// get file size
 	lseek(fd, 0, SEEK_SET);
 	size_t size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
+
+	// send each byte via message structure
 	for (int i = 0; i < size; ++i) {
 		unsigned char c;
 		read(fd, &c, sizeof(unsigned char));
@@ -633,6 +670,7 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 		write(respfd, &downloadResponse, sizeof(struct message_t));
 	}
 
+	// information about command OK
 	sendOneMsg(respfd, "Download OK!\n");
 
 	// unlock file
@@ -641,6 +679,7 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 	close(fd);
 }
 
+//  receive file content from client
 void respondUpload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd)
 {
 	// Get file name from request
@@ -648,6 +687,7 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 	memset(fullPath, '\0', BUFFER_SIZE);
 	sprintf(fullPath, "%s/%s", root, req.content);
 
+	// print log
 	char logLine[LNG_BUFFER_SIZE];
 	memset(logLine, '\0', LNG_BUFFER_SIZE);
 	char* time = timeAsString();
@@ -661,6 +701,7 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 		return;		
 	}
 
+	// open if the file OK
 	int fd = open(fullPath, O_CREAT | O_WRONLY, USR_READ_WRITE);
 	if (FALSE == fd) {
 		sendOneMsg(respfd, "Undefined error while file creating...\n");
@@ -684,6 +725,8 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 	struct message_t clientMsg;
 	memset(clientMsg.content, '\0', MSG_BUFFER_SIZE);
 	do {
+		// if the command type is command end then finished function
+		// but command type is content then write file content
 		read(workerFd, &clientMsg, sizeof(struct message_t));
 		if (clientMsg.type == FILE_CONTENT) {
 			unsigned char c = (unsigned char) clientMsg.content[0];
@@ -695,5 +738,6 @@ void respondUpload(int respfd, int workerFd, struct message_t req, const char* r
 	file_lock.l_type = F_UNLCK;
 	fcntl(fd,F_SETLKW,&file_lock);
 
+	// information about command OK
 	sendOneMsg(respfd, "Upload OK!\n");
 }

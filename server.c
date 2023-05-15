@@ -14,22 +14,27 @@ int isSigint = FALSE;
 pid_t* workerPool = NULL;
 pid_t parentPid;
 
-// -- Shared Memory Part -- //
 int shmFd = -1;
-pid_t* clientQueue = NULL;
-int* clientIdQueue = NULL;
-int* availableWorker = NULL;
 
 // -- Semaphore Part -- //
+// using for producer consumer to worker retrieving client pid and id 
+pid_t* clientQueue = NULL;
+int* clientIdQueue = NULL;
 sem_t* fullSem;
 sem_t* emptySem;
 sem_t* mutexSem;
+
+// available worker is integer worker access this memory
+// semaphore using for mutual exclusion
+// -- Shared Memory Part -- //
+int* availableWorker = NULL;
 sem_t* mutexAvailableWorker;
 
 // -- Worker Part -- //
 int WorkerMain(int WorkerID);
 // ####################### -- ####################### -- ####################### -- ####################### //
 
+// wait all workers exiting
 void waitAllWorkers()
 {
     for (int i = 0; i < clientCapacity; ++i) {
@@ -38,6 +43,7 @@ void waitAllWorkers()
     }
 }
 
+// cleanup server and worker function runs on exiting
 void cleanupServer()
 {
     for (int i = 0; i < clientCapacity; ++i)
@@ -75,6 +81,7 @@ void cleanupServer()
     fprintf(stdout, "bye\n");
 }
 
+// signal handler just exit
 void sigintHandler()
 {
     if (isSigint == FALSE) {
@@ -83,6 +90,7 @@ void sigintHandler()
     }  
 }
 
+// init server arguments from user
 void initServerArgs(int argc, char const *argv[])
 {
     if (argc != 3) {
@@ -108,6 +116,7 @@ void initServerArgs(int argc, char const *argv[])
     }
 }
 
+// kill server command send sigint to server
 void killServer()
 {
     kill(parentPid, SIGINT);
@@ -141,6 +150,7 @@ int createWorkerFifos(int WorkerID)
     return workerFd;
 }
 
+// init worker process
 void initWorkers()
 {
     workerPool = (pid_t*) calloc(clientCapacity, sizeof(pid_t));
@@ -161,6 +171,7 @@ void initWorkers()
     }
 }
 
+// init all semaphores
 void initSemaphores()
 {
     emptySem = sem_open(EMPTY_SEM, O_CREAT, USR_READ_WRITE, SHARED_MEM_SIZE / sizeof(pid_t));
@@ -170,6 +181,7 @@ void initSemaphores()
     mutexAvailableWorker = sem_open(AV_WRK_SEM, O_CREAT, USR_READ_WRITE, 1);
 }
 
+// init all shared memories
 void initSharedMemories()
 {
     // Init client queue
@@ -227,6 +239,7 @@ void initSharedMemories()
     // Init worker counter
 }
 
+// init signal handlers
 void initSignals()
 {
     struct sigaction sigintAction;
@@ -235,6 +248,7 @@ void initSignals()
     sigaction(SIGINT, &sigintAction, NULL);
 }
 
+// init log files
 void initLogFile()
 {
     memset(fullLogPath, '\0', BUFFER_SIZE);
@@ -250,6 +264,7 @@ void initLogFile()
     }
 }
 
+// create server fifo
 int createServerFifo()
 {
     umask(0);
@@ -284,6 +299,7 @@ int createServerFifo()
     return returnFd;
 }
 
+// open client response fifo
 int openClientResponseFifo(pid_t clientPid)
 {
     char clientEndPoint[HALF_BUFFER];
@@ -293,6 +309,7 @@ int openClientResponseFifo(pid_t clientPid)
     return clientFd;
 }
 
+// open worker fifo write side dummy because prevent to kernel send EOF to fifo
 void openWorkerFifosDummy()
 {
     for (int i = 0; i < clientCapacity; ++i) {
@@ -307,6 +324,7 @@ void openWorkerFifosDummy()
     } 
 }
 
+// server activity
 void serverActivity()
 {
     int fifoFd = createServerFifo();
@@ -331,6 +349,9 @@ void serverActivity()
             continue;
         }
 
+        // if there  is not available  worker 
+        //    if the client send try connect then decline connection
+        //    it the client send connect then push client queue client pid and id
         sem_wait(mutexAvailableWorker);
         if (*availableWorker == 0) {
 
@@ -400,6 +421,7 @@ void serverActivity()
     }
 }
 
+// send response to client uses from worker
 int sendResponse(int fd, int workerFd, struct message_t request, int clientId, int clientLogFd)
 {
     if (request.type == HELP) {
@@ -468,6 +490,7 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
+// worker main function
 int WorkerMain(int WorkerID)
 {
     serverFlag = FALSE;
