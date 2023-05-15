@@ -1,5 +1,40 @@
 #include "utils.h"
 
+// parse writeF options
+void parseWriteF(char* str, char* array1, char* array2, char* array3, char* array4)
+{
+	char* token = strtok(str, " ");
+    if (token != NULL) {
+        strcpy(array1, token);
+        token = strtok(NULL, " ");
+        if (token != NULL) {
+            strcpy(array2, token);
+            token = strtok(NULL, " ");
+            if (token != NULL) {
+                strcpy(array3, token);
+                token = strtok(NULL, "\n"); 
+                if (token != NULL) {
+                    strcpy(array4, token);
+                } else {
+                    strcpy(array4, "XX");
+                }
+            } else {
+                strcpy(array3, "XX");
+                strcpy(array4, "XX");
+            }
+        } else {
+            strcpy(array2, "XX");
+            strcpy(array3, "XX");
+            strcpy(array4, "XX");
+        }
+    } else {
+        strcpy(array1, "XX");
+        strcpy(array2, "XX");
+        strcpy(array3, "XX");
+        strcpy(array4, "XX");
+    }
+}
+
 // char 2d to write file
 void char2DToFile(int fd, char** content, int size)
 {
@@ -165,7 +200,7 @@ struct message_t prepareConnectionRequest(const char* connectionCommand)
 }
 
 // prepare command from user
-struct message_t prepareCommand(const char* input)
+struct message_t prepareCommand(char* input)
 {
     struct message_t commandRequest;
     commandRequest.type = UNKNOWN;
@@ -207,6 +242,7 @@ struct message_t prepareCommand(const char* input)
         sprintf(commandRequest.content, "%s %s", param1, param2);
     } else if (strcmp(command, "writeF") == 0) {
         commandRequest.type = WRITEF;
+		parseWriteF(input, command, param1, param2, param3);
         sprintf(commandRequest.content, "%s %s %s", param1, param2, param3);
     } else if (strcmp(command, "upload") == 0) {
         commandRequest.type = UPLOAD;
@@ -502,7 +538,11 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 	char param3[HALF_BUFFER];
 	memset(param3, '\0', HALF_BUFFER);
 
-	sscanf(req.content, "%s %s %s", param, param2, param3);
+	sscanf(req.content, "%s %s %[^\n]", param, param2, param3);
+	if (strcmp(param2, "XX") == 0) {
+		sendOneMsg(respfd, "There is not line number\n");
+		return;
+	}
 
 	// log file line
 	char logLine[LNG_BUFFER_SIZE];

@@ -147,7 +147,8 @@ void runClientApp()
         char userInput[HALF_BUFFER];
         memset(userInput, '\0', HALF_BUFFER);
         fprintf(stdout, "Enter comment: ");
-        fgets(userInput, HALF_BUFFER, stdin); 
+        fgets(userInput, HALF_BUFFER, stdin);
+        userInput[strcspn(userInput, "\n")] = '\0';
 
         // retrieve responses from worker
         int downloadedFd = -1;

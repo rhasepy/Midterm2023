@@ -117,6 +117,7 @@ void respondReadF(int respfd, struct message_t req, const char* root, int client
 void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd);
 void respondUpload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
 void respondDowload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
+void parseWriteF(char* str, char* array1, char* array2, char* array3, char* array4);
 void listFilesAndDirectories(int respfd, const char* path, int level, int clientLogFd);
 void clearFileContent(char** data, int len);
 void char2DToFile(int fd, char** content, int size);
@@ -135,6 +136,6 @@ pid_t getAndShiftPID(pid_t* queue, int len);
 
 // some utility function for client side
 struct message_t prepareConnectionRequest(const char* connectionCommand);
-struct message_t prepareCommand(const char* input);
+struct message_t prepareCommand(char* input);
 
 #endif
