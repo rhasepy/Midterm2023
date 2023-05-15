@@ -175,7 +175,7 @@ void runClientApp()
             if (response.type == FILENAME) {
 
                 // create file
-                downloadedFd = open(response.content, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                downloadedFd = open(response.content, O_WRONLY | O_CREAT | O_TRUNC, 0777);
 
                 // if the can not create file
                 if (FALSE == downloadedFd) {
@@ -190,30 +190,19 @@ void runClientApp()
                 write(workerFd, &command, sizeof(struct message_t));
 
             } else if (response.type == FILE_CONTENT) {
-                write(downloadedFd, response.content, MSG_BUFFER_SIZE);
+                write(downloadedFd, response.content, strlen(response.content));
             } else if (response.type == UPLOAD_OK) {
 
-                size_t fileSize;
-	            char* content = readFileAs1D(uploadedFd, &fileSize);
-
-                // whole line sending with 1024 byte chunks.
-                for (int i = 0; i < fileSize; i += MSG_BUFFER_SIZE) {
-                    // chunk data
-                    char buffer[MSG_BUFFER_SIZE];
-                    memset(buffer, '\0', MSG_BUFFER_SIZE);
-
-                    // if the remianig chunk less than MSG BUFFER SIZE then does not write MSG BUFFER SIZE
-                    if ((fileSize - i) > MSG_BUFFER_SIZE) {
-                        strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
-                        buffer[MSG_BUFFER_SIZE - 1] = '\0';
-                    } else {
-                        strncpy(buffer, content + i, fileSize - i);
-                        buffer[fileSize - i] = '\0';
-                    }
-
-                    // send chunk data
+                lseek(uploadedFd, 0, SEEK_SET);
+                size_t size = lseek(uploadedFd, 0, SEEK_END);
+                lseek(uploadedFd, 0, SEEK_SET);
+                for (int i = 0; i < size; ++i) {
+                    unsigned char c;
+                    read(uploadedFd, &c, sizeof(unsigned char));
                     response.type = FILE_CONTENT;
-                    sprintf(response.content, "%s", buffer);
+                    memset(response.content, '\0',  MSG_BUFFER_SIZE);
+                    response.content[0] = c;
+                    response.content[1] = '\0';
                     write(workerFd, &response, sizeof(struct message_t));
                 }
                 sendOneMsg(workerFd, "Transfer finished\n");
@@ -221,8 +210,6 @@ void runClientApp()
                 memset(response.content, '\0', MSG_BUFFER_SIZE);
                 read(clientFd, &response, sizeof(struct message_t));
                 fprintf(stdout, "%s", response.content);
-
-                free(content);
 
             } else {
                 fprintf(stdout, "%s", response.content);

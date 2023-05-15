@@ -592,7 +592,7 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 	write(clientLogFd, logLine, strlen(logLine));
 	free(time);
 	
-	int fd = open(fullPath, O_RDONLY);
+	int fd = open(fullPath, O_RDONLY, 0777);
 	if (FALSE == fd) {
 		sendOneMsg(respfd, "Invalid file...\n");
 		return;
@@ -604,10 +604,6 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 	file_lock.l_type = F_WRLCK;
 	fcntl(fd,F_SETLKW,&file_lock);
 	
-	// read file
-	size_t fileSize;
-	char* content = readFileAs1D(fd, &fileSize);
-
 	// send file name to client
 	struct message_t downloadResponse;
     memset(downloadResponse.content, '\0', MSG_BUFFER_SIZE);
@@ -622,31 +618,22 @@ void respondDowload(int respfd, int workerFd, struct message_t req, const char* 
 		file_lock.l_type = F_UNLCK;
 		fcntl(fd,F_SETLKW,&file_lock);
 		close(fd);
-		free(content);
 	}
 
-	// whole line sending with 1024 byte chunks.
-	for (int i = 0; i < fileSize; i += MSG_BUFFER_SIZE) {
-		// chunk data
-		char buffer[MSG_BUFFER_SIZE];
-		memset(buffer, '\0', MSG_BUFFER_SIZE);
-
-		// if the remianig chunk less than MSG BUFFER SIZE then does not write MSG BUFFER SIZE
-		if ((fileSize - i) > MSG_BUFFER_SIZE) {
-			strncpy(buffer, content + i, MSG_BUFFER_SIZE - 1);
-			buffer[MSG_BUFFER_SIZE - 1] = '\0';
-		} else {
-			strncpy(buffer, content + i, fileSize - i);
-			buffer[fileSize - i] = '\0';
-		}
-
-		// send chunk data
+	lseek(fd, 0, SEEK_SET);
+	size_t size = lseek(fd, 0, SEEK_END);
+	lseek(fd, 0, SEEK_SET);
+	for (int i = 0; i < size; ++i) {
+		unsigned char c;
+		read(fd, &c, sizeof(unsigned char));
 		downloadResponse.type = FILE_CONTENT;
-		sprintf(downloadResponse.content, "%s", buffer);
+		memset(downloadResponse.content, '\0',  MSG_BUFFER_SIZE);
+		downloadResponse.content[0] = c;
+		downloadResponse.content[1] = '\0';
 		write(respfd, &downloadResponse, sizeof(struct message_t));
 	}
+
 	sendOneMsg(respfd, "Download OK!\n");
-	free(content);
 
 	// unlock file
 	file_lock.l_type = F_UNLCK;
