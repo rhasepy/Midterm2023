@@ -210,7 +210,7 @@ struct message_t prepareCommand(char* input)
         return commandRequest;
     }
 
-    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeT <file> <line #> <string>)
+    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeF <file> <line #> <string>)
     // because worst case string is empty if the string is empty
     // parsed 4 token is 'XX' then command is unknown and empty command
     // worker does not respond  
@@ -354,7 +354,7 @@ void respondHelp(int respfd, struct message_t req, int clientLogFd)
 		write(clientLogFd, logLine, strlen(logLine));
 		free(time);
 
-		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeT, upload, download, quit, killServer\n\n");
+		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeF, upload, download, quit, killServer\n\n");
 		response.type = COMMAND_END;
 		write(respfd, &response, sizeof(struct message_t));
 		return;
@@ -624,6 +624,25 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 				write(fd, "\n", 1);
 		}
 
+		// unlock file
+		file_lock.l_type = F_UNLCK;
+		fcntl(fd,F_SETLKW,&file_lock);
+		close(fd);
+
+		// respond about writeF finished
+		sendOneMsg(respfd, "writeF OK!...\n");
+		clearFileContent(fileContent, lineSize);
+		return;
+	} else if (editLine == -1 && strcmp(param2, "XX") != 0) {
+		char2DToFile(fd, fileContent, lineSize);
+		write(fd, "\n", 1);
+		write(fd, param2, strlen(param2));
+
+		if (strcmp(param3, "XX") != 0) {
+			write(fd, " ", 1);
+			write(fd, param3, strlen(param3));
+		}
+		
 		// unlock file
 		file_lock.l_type = F_UNLCK;
 		fcntl(fd,F_SETLKW,&file_lock);
