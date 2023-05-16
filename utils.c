@@ -1,7 +1,7 @@
 #include "utils.h"
 
-// parse writeF options
-void parseWriteF(char* str, char* array1, char* array2, char* array3, char* array4)
+// parse writeT options
+void parseWriteT(char* str, char* array1, char* array2, char* array3, char* array4)
 {
 	char* token = strtok(str, " ");
     if (token != NULL) {
@@ -210,7 +210,7 @@ struct message_t prepareCommand(char* input)
         return commandRequest;
     }
 
-    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeF <file> <line #> <string>)
+    // command max has 4 parameter and i pushed string 4 x 'XX'. (e.g. writeT <file> <line #> <string>)
     // because worst case string is empty if the string is empty
     // parsed 4 token is 'XX' then command is unknown and empty command
     // worker does not respond  
@@ -240,9 +240,9 @@ struct message_t prepareCommand(char* input)
     } else if (strcmp(command, "readF") == 0) {
         commandRequest.type = READF;
         sprintf(commandRequest.content, "%s %s", param1, param2);
-    } else if (strcmp(command, "writeF") == 0) {
-        commandRequest.type = WRITEF;
-		parseWriteF(input, command, param1, param2, param3);
+    } else if (strcmp(command, "writeT") == 0) {
+        commandRequest.type = WRITET;
+		parseWriteT(input, command, param1, param2, param3);
         sprintf(commandRequest.content, "%s %s %s", param1, param2, param3);
     } else if (strcmp(command, "upload") == 0) {
         commandRequest.type = UPLOAD;
@@ -354,7 +354,7 @@ void respondHelp(int respfd, struct message_t req, int clientLogFd)
 		write(clientLogFd, logLine, strlen(logLine));
 		free(time);
 
-		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeF, upload, download, quit, killServer\n\n");
+		sprintf(response.content, "\tAvailable comments are : \nhelp, list, readF, writeT, upload, download, quit, killServer\n\n");
 		response.type = COMMAND_END;
 		write(respfd, &response, sizeof(struct message_t));
 		return;
@@ -372,8 +372,8 @@ void respondHelp(int respfd, struct message_t req, int clientLogFd)
 		sprintf(response.content, "list\n\tshows that available all files from server side\n\n");
 	} else if (strcmp(param, "readF") == 0) {
 		sprintf(response.content, "readF <file> <line#>\n\tdisplay the #th line of the <file>, returns with an error if <file> does not exists\n\n");
-	} else if (strcmp(param, "writeF") == 0) {
-		sprintf(response.content, "writeF <file> <line#> <string>\n\tput <string> the #th line of the <file>, If the file does not exists in Servers directory creates and edits the file at the same time\n\n");
+	} else if (strcmp(param, "writeT") == 0) {
+		sprintf(response.content, "writeT <file> <line#> <string>\n\tput <string> the #th line of the <file>, If the file does not exists in Servers directory creates and edits the file at the same time\n\n");
 	} else if (strcmp(param, "upload") == 0) {
 		sprintf(response.content, "upload <file>\n\tupload <file> to server side from client side\n\n");
 	} else if (strcmp(param, "download") == 0) {	
@@ -529,7 +529,7 @@ void respondReadF(int respfd, struct message_t req, const char* root, int client
 }
 
 // write file content
-void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd)
+void respondWriteT(int respfd, struct message_t req, const char* root, int clientLogFd)
 {
 	char param[HALF_BUFFER];
 	memset(param, '\0', HALF_BUFFER);
@@ -581,7 +581,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 	// there is not line in command
 	if (strcmp(param3, "XX") == 0) {
 		char* time = timeAsString();
-		sprintf(logLine, "[%s]writeF command, parameters <%s> <%s>\n", time, param, param2);
+		sprintf(logLine, "[%s]writeT command, parameters <%s> <%s>\n", time, param, param2);
 		write(clientLogFd, logLine, strlen(logLine));
 		free(time);
 
@@ -596,8 +596,8 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 		file_lock.l_type = F_UNLCK;
 		fcntl(fd,F_SETLKW,&file_lock);
 
-		// respond about writeF finished
-		sendOneMsg(respfd, "writeF OK!...\n");
+		// respond about writeT finished
+		sendOneMsg(respfd, "writeT OK!...\n");
 		clearFileContent(fileContent, lineSize);
 		close(fd);
 		return;
@@ -605,7 +605,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 
 	// print log
 	char* time = timeAsString();
-	sprintf(logLine, "[%s]writeF command, parameters <%s> <%s> <%s>\n", time, param, param2, param3);
+	sprintf(logLine, "[%s]writeT command, parameters <%s> <%s> <%s>\n", time, param, param2, param3);
 	write(clientLogFd, logLine, strlen(logLine));
 	free(time);
 
@@ -629,8 +629,8 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 		fcntl(fd,F_SETLKW,&file_lock);
 		close(fd);
 
-		// respond about writeF finished
-		sendOneMsg(respfd, "writeF OK!...\n");
+		// respond about writeT finished
+		sendOneMsg(respfd, "writeT OK!...\n");
 		clearFileContent(fileContent, lineSize);
 		return;
 	} else if (editLine == -1 && strcmp(param2, "XX") != 0) {
@@ -648,8 +648,8 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 		fcntl(fd,F_SETLKW,&file_lock);
 		close(fd);
 
-		// respond about writeF finished
-		sendOneMsg(respfd, "writeF OK!...\n");
+		// respond about writeT finished
+		sendOneMsg(respfd, "writeT OK!...\n");
 		clearFileContent(fileContent, lineSize);
 		return;
 	}
@@ -662,7 +662,7 @@ void respondWriteF(int respfd, struct message_t req, const char* root, int clien
 	fcntl(fd,F_SETLKW,&file_lock);
 	close(fd);
 	
-	// respond about writeF finished
+	// respond about writeT finished
 	sendOneMsg(respfd, "Invalid line...\n");
 	clearFileContent(fileContent, lineSize);
 }

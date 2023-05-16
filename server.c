@@ -19,6 +19,7 @@ int shmFd = -1;
 // -- Semaphore Part -- //
 // using for producer consumer to worker retrieving client pid and id 
 pid_t* clientQueue = NULL;
+pid_t allClient[SERVER_MAX_CLIENT];
 int* clientIdQueue = NULL;
 sem_t* fullSem = NULL;
 sem_t* emptySem = NULL;
@@ -50,6 +51,10 @@ void cleanupServer()
         kill(workerPool[i], SIGINT);
 
     waitAllWorkers();
+
+    for (int i = 0; i < SERVER_MAX_CLIENT; ++i)
+        if (allClient[i] != -1)
+            kill(allClient[i], SIGINT);
 
     sem_close(emptySem);
     sem_close(fullSem);
@@ -198,9 +203,11 @@ void initSharedMemories()
         exit(1);
     }
 
-    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i) {
+    for (int i = 0; i < SERVER_MAX_CLIENT; ++i)
+        allClient[i] = -1;
+
+    for (int i = 0; i < SHARED_MEM_SIZE / sizeof(pid_t); ++i)
         clientQueue[i] = -1;
-    }
     // Init client queue
 
     // Init client queue for id
@@ -415,7 +422,9 @@ void serverActivity()
         sem_wait(mutexSem);
         int queueDelimetor = findIndex(clientQueue, -1);
         clientQueue[queueDelimetor] = clientPid;
+        allClient[clientId - 1] = clientPid;
         clientIdQueue[queueDelimetor++] = clientId++;
+
         sem_post(mutexSem);
         sem_post(fullSem);
     }
@@ -430,8 +439,8 @@ int sendResponse(int fd, int workerFd, struct message_t request, int clientId, i
         respondList(fd, workingDirectory, clientLogFd);
     } else if (request.type == READF) {
         respondReadF(fd, request, workingDirectory, clientLogFd);
-    }  else if (request.type == WRITEF)  {
-        respondWriteF(fd, request, workingDirectory, clientLogFd);
+    }  else if (request.type == WRITET)  {
+        respondWriteT(fd, request, workingDirectory, clientLogFd);
     } else if (request.type == UPLOAD) {
         respondUpload(fd, workerFd, request, workingDirectory, clientLogFd);
     } else if (request.type ==  DOWNLOAD) {

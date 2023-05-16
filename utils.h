@@ -32,7 +32,8 @@
 #define AV_WKR_MEM          "AV_WRK_MEM"
 
 // shared memory size
-#define SHARED_MEM_SIZE     40000 * sizeof(pid_t)
+#define SERVER_MAX_CLIENT   40000
+#define SHARED_MEM_SIZE     (SERVER_MAX_CLIENT) * sizeof(pid_t)
 
 // some permission
 #define PROT_READ_WRITE     PROT_READ | PROT_WRITE
@@ -65,8 +66,8 @@ enum messageType
     QUIT,
     // readF command
     READF,
-    // writeF command
-    WRITEF,
+    // writeT command
+    WRITET,
     // upload command
     UPLOAD,
     // error message or information message unknown operation
@@ -114,10 +115,10 @@ void sendStr(int respfd, const char* str);
 void respondList(int respfd, const char* root, int clientLogFd);
 void respondHelp(int respfd, struct message_t req, int clientLogFd);
 void respondReadF(int respfd, struct message_t req, const char* root, int clientLogFd);
-void respondWriteF(int respfd, struct message_t req, const char* root, int clientLogFd);
+void respondWriteT(int respfd, struct message_t req, const char* root, int clientLogFd);
 void respondUpload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
 void respondDowload(int respfd, int workerFd, struct message_t req, const char* root, int clientLogFd);
-void parseWriteF(char* str, char* array1, char* array2, char* array3, char* array4);
+void parseWriteT(char* str, char* array1, char* array2, char* array3, char* array4);
 void listFilesAndDirectories(int respfd, const char* path, int level, int clientLogFd);
 void clearFileContent(char** data, int len);
 void char2DToFile(int fd, char** content, int size);

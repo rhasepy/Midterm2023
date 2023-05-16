@@ -21,6 +21,7 @@ void cleanupClient()
 // sigint handler for client
 void sigintHandler()
 {
+    fprintf(stdout, "Server killed!\n");
     exit(1);
 }
 
