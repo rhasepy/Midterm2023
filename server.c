@@ -571,11 +571,13 @@ int WorkerMain(int WorkerID)
             // Do client request and send response
         } while (FALSE != sendResponse(clientFd, workerFd, request, clientId, clientLogFd));
         fprintf(stdout, "client%d diconnected..\n", clientId);
+        allClient[clientId - 1] = -1;
 
         char temp[BUFFER_SIZE];
         memset(temp, '\0', BUFFER_SIZE);
         char* tempTime = timeAsString();
         sprintf(temp, "[%s]client%d diconnected..\n", tempTime, clientId);
+        
         free(tempTime);
         write(serverLogFd, temp, strlen(temp));
         
